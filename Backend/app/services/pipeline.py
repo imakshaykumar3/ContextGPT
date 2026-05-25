@@ -1,12 +1,12 @@
-from utils.audio_processor import process_input
-from core.transcriber import transcribe_all
-from core.summarize import generate_title, summarize
-from core.extractor import (
+from app.utils.audio_processor import process_input
+from app.core.transcriber import transcribe_all
+from app.core.summarize import generate_title, summarize
+from app.core.extractor import (
     extract_action_items,
     extract_key_decisions,
     extract_questions
 )
-from core.rag_engine import build_rag_chain
+from app.core.rag_engine import build_rag_chain
 
 
 def run_pipeline(source: str) -> dict:
