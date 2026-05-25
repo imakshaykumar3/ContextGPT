@@ -2,19 +2,14 @@ from app.db.database import SessionLocal
 from app.db.models import Meeting
 
 
-def save_meeting(data):
+def create_meeting(source, language, title):
 
     db = SessionLocal()
 
     meeting = Meeting(
-        title=data["title"],
-        source=data["source"],
-        language=data["language"],
-        transcript=data["transcript"],
-        summary=data["summary"],
-        action_items=data["action_items"],
-        key_decisions=data["key_decisions"],
-        open_questions=data["open_questions"]
+        source=source,
+        language=language,
+        title=title
     )
 
     db.add(meeting)
@@ -26,3 +21,23 @@ def save_meeting(data):
     db.close()
 
     return meeting.id
+
+
+def update_meeting_files(
+    meeting_id,
+    transcript_path,
+    summary_path
+):
+
+    db = SessionLocal()
+
+    meeting = db.query(Meeting).filter(
+        Meeting.id == meeting_id
+    ).first()
+
+    meeting.transcript_path = transcript_path
+    meeting.summary_path = summary_path
+
+    db.commit()
+
+    db.close()

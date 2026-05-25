@@ -1,4 +1,10 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime
+from sqlalchemy import (
+    Column,
+    Integer,
+    String,
+    DateTime
+)
+
 from datetime import datetime
 
 from app.db.database import Base
@@ -16,15 +22,9 @@ class Meeting(Base):
 
     language = Column(String)
 
-    transcript = Column(Text)
+    transcript_path = Column(String)
 
-    summary = Column(Text)
-
-    action_items = Column(Text)
-
-    key_decisions = Column(Text)
-
-    open_questions = Column(Text)
+    summary_path = Column(String)
 
     created_at = Column(
         DateTime,
