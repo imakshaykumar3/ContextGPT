@@ -6,19 +6,22 @@ from app.core.extractor import (
     extract_key_decisions,
     extract_questions
 )
-from app.core.rag_engine import build_rag_chain
+
+from app.services.db_service import save_meeting
 
 
-def run_pipeline(source: str) -> dict:
+def run_pipeline(source: str, language: str = "english") -> dict:
 
+    # Process input audio/video
     chunks = process_input(source)
-    language = "en"  # Default to English, can be made dynamic based on user input
 
+    # Transcribe
     transcript = transcribe_all(
         chunks,
         language=language
     )
 
+    # Generate outputs
     title = generate_title(transcript)
 
     summary = summarize(transcript)
@@ -29,13 +32,22 @@ def run_pipeline(source: str) -> dict:
 
     questions = extract_questions(transcript)
 
-    rag_chain = build_rag_chain(transcript)
-
-    return {
+    # Final result dictionary
+    result = {
         "title": title,
+        "source": source,
+        "language": language,
         "transcript": transcript,
         "summary": summary,
         "action_items": action_items,
         "key_decisions": decisions,
         "open_questions": questions,
     }
+
+    # Save to PostgreSQL
+    meeting_id = save_meeting(result)
+
+    # Add meeting ID to response
+    result["meeting_id"] = meeting_id
+
+    return result
