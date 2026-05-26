@@ -16,16 +16,24 @@ from app.services.pipeline import run_pipeline
 from app.db.database import SessionLocal
 from app.db.models import Meeting
 
+from app.rag.rag_engine import (
+    ask_question
+)
+
 
 router = APIRouter()
 
 
 # =========================
-# Request Schema
+# Request Schemas
 # =========================
 class ProcessRequest(BaseModel):
     source: str
     language: str = "en"
+
+
+class ChatRequest(BaseModel):
+    question: str
 
 
 # =========================
@@ -175,6 +183,7 @@ def get_meeting(meeting_id: int):
 
         # Return final response
         return {
+
             "id": meeting.id,
 
             "title": meeting.title,
@@ -199,3 +208,42 @@ def get_meeting(meeting_id: int):
     finally:
 
         db.close()
+
+
+# =========================
+# Chat With Meeting
+# =========================
+@router.post("/chat/{meeting_id}")
+def chat_with_meeting(
+    meeting_id: int,
+    request: ChatRequest
+):
+
+    try:
+
+        result = ask_question(
+            meeting_id,
+            request.question
+        )
+
+        return {
+
+            "meeting_id": meeting_id,
+
+            "question": request.question,
+
+            "rewritten_query": result[
+                "rewritten_query"
+            ],
+
+            "answer": result[
+                "answer"
+            ]
+        }
+
+    except Exception as e:
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )

@@ -25,13 +25,22 @@ from app.services.storage_service import (
     save_summary
 )
 
+from app.rag.rag_engine import (
+    build_vector_store
+)
 
-# Configure logger
+
+# =========================
+# Configure Logger
+# =========================
 logging.basicConfig(level=logging.INFO)
 
 logger = logging.getLogger(__name__)
 
 
+# =========================
+# Main AI Pipeline
+# =========================
 def run_pipeline(
     source: str,
     language: str = "english"
@@ -39,10 +48,16 @@ def run_pipeline(
 
     try:
 
-        logger.info("Starting AI Meeting Pipeline")
+        logger.info(
+            "Starting AI Meeting Pipeline"
+        )
 
-        # Process input
-        logger.info("Processing audio/video input")
+        # =========================
+        # Process Input
+        # =========================
+        logger.info(
+            "Processing audio/video input"
+        )
 
         chunks = process_input(source)
 
@@ -57,55 +72,84 @@ def run_pipeline(
             f"{len(chunks)} chunks created successfully"
         )
 
+        # =========================
         # Transcription
-        logger.info("Starting transcription")
+        # =========================
+        logger.info(
+            "Starting transcription"
+        )
 
         transcript = transcribe_all(
             chunks,
             language=language
         )
 
+        # Validate transcript
         if not transcript:
 
             raise Exception(
                 "Transcription failed"
             )
 
-        logger.info("Transcription completed")
+        logger.info(
+            "Transcription completed"
+        )
 
-        # Generate title
-        logger.info("Generating meeting title")
+        # =========================
+        # Generate AI Outputs
+        # =========================
+        logger.info(
+            "Generating meeting title"
+        )
 
-        title = generate_title(transcript)
-
-        # Generate summary
-        logger.info("Generating summary")
-
-        summary = summarize(transcript)
-
-        # Extract action items
-        logger.info("Extracting action items")
-
-        action_items = extract_action_items(
+        title = generate_title(
             transcript
         )
 
-        # Extract decisions
-        logger.info("Extracting key decisions")
+        logger.info(
+            "Generating summary"
+        )
 
-        decisions = extract_key_decisions(
+        summary = summarize(
             transcript
         )
 
-        # Extract questions
-        logger.info("Extracting open questions")
-
-        questions = extract_questions(
-            transcript
+        logger.info(
+            "Extracting action items"
         )
 
-        # Create DB record
-        logger.info("Creating database record")
+        action_items = (
+            extract_action_items(
+                transcript
+            )
+        )
+
+        logger.info(
+            "Extracting key decisions"
+        )
+
+        decisions = (
+            extract_key_decisions(
+                transcript
+            )
+        )
+
+        logger.info(
+            "Extracting open questions"
+        )
+
+        questions = (
+            extract_questions(
+                transcript
+            )
+        )
+
+        # =========================
+        # Create DB Record
+        # =========================
+        logger.info(
+            "Creating database record"
+        )
 
         meeting_id = create_meeting(
             source,
@@ -117,15 +161,41 @@ def run_pipeline(
             f"Meeting created with ID: {meeting_id}"
         )
 
-        # Save transcript
-        logger.info("Saving transcript file")
+        # =========================
+        # Save Transcript
+        # =========================
+        logger.info(
+            "Saving transcript file"
+        )
 
         transcript_path = save_transcript(
             meeting_id,
             transcript
         )
 
-        # Prepare summary JSON
+        logger.info(
+            "Transcript saved successfully"
+        )
+
+        # =========================
+        # Build Vector Database
+        # =========================
+        logger.info(
+            "Building vector database"
+        )
+
+        build_vector_store(
+            meeting_id,
+            transcript
+        )
+
+        logger.info(
+            "Vector database created"
+        )
+
+        # =========================
+        # Prepare Summary JSON
+        # =========================
         summary_data = {
             "summary": summary,
             "action_items": action_items,
@@ -133,16 +203,28 @@ def run_pipeline(
             "open_questions": questions
         }
 
-        # Save summary JSON
-        logger.info("Saving summary JSON")
+        # =========================
+        # Save Summary JSON
+        # =========================
+        logger.info(
+            "Saving summary JSON"
+        )
 
         summary_path = save_summary(
             meeting_id,
             summary_data
         )
 
-        # Update DB with file paths
-        logger.info("Updating database with file paths")
+        logger.info(
+            "Summary JSON saved"
+        )
+
+        # =========================
+        # Update DB With File Paths
+        # =========================
+        logger.info(
+            "Updating database with file paths"
+        )
 
         update_meeting_files(
             meeting_id,
@@ -151,10 +233,18 @@ def run_pipeline(
         )
 
         logger.info(
+            "Database updated successfully"
+        )
+
+        logger.info(
             "Pipeline completed successfully"
         )
 
+        # =========================
+        # Final Response
+        # =========================
         return {
+
             "meeting_id": meeting_id,
 
             "title": title,
