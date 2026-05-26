@@ -14,7 +14,7 @@ from langchain_text_splitters import (
 
 from langchain_core.documents import Document
 
-from langchain_mistralai import ChatMistralAI
+from langchain_openai import ChatOpenAI
 
 from langchain_core.prompts import (
     ChatPromptTemplate
@@ -50,10 +50,10 @@ def get_embeddings():
 # =========================
 def get_llm():
 
-    return ChatMistralAI(
-        model="mistral-small-latest",
-        mistral_api_key=os.getenv(
-            "MISTRAL_API_KEY"
+    return ChatOpenAI(
+        model="gpt-4o-mini",
+        openai_api_key=os.getenv(
+            "OPENAI_API_KEY"
         ),
         temperature=0.3
     )

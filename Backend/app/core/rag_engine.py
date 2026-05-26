@@ -1,15 +1,15 @@
 #core/rag_engine.py
 import os
-from langchain_mistralai import ChatMistralAI
+from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnablePassthrough, RunnableLambda
 from langchain_core.output_parsers import StrOutputParser
 from app.core.vector_store import build_vector_store, load_vector_store, get_retriever
 
 def get_llm():
-    return ChatMistralAI(
-        model = "mistral-small-latest",
-        mistral_api_key = os.getenv("MISTRAL_API_KEY"),
+    return ChatOpenAI(
+        model = "gpt-4o-mini",
+        openai_api_key = os.getenv("OPENAI_API_KEY"),
         temperature = 0.3
     )
 
