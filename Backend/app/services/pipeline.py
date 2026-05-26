@@ -1,12 +1,17 @@
 import logging
+import os
 
-from app.utils.audio_processor import process_input
+from app.utils.audio_processor import (
+    process_input
+)
 
-from app.core.transcriber import transcribe_all
+from app.core.transcriber import (
+    transcribe_all
+)
 
 from app.core.summarize import (
-    generate_title,
-    summarize
+    summarize,
+    generate_title
 )
 
 from app.core.extractor import (
@@ -15,9 +20,8 @@ from app.core.extractor import (
     extract_questions
 )
 
-from app.services.db_service import (
-    create_meeting,
-    update_meeting_files
+from app.rag.vector_store import (
+    build_vector_store
 )
 
 from app.services.storage_service import (
@@ -25,15 +29,12 @@ from app.services.storage_service import (
     save_summary
 )
 
-from app.rag.rag_engine import (
-    build_vector_store
+from app.services.db_service import (
+    create_meeting,
+    update_meeting_files,
+    mark_meeting_failed
 )
 
-
-# =========================
-# Configure Logger
-# =========================
-logging.basicConfig(level=logging.INFO)
 
 logger = logging.getLogger(__name__)
 
@@ -43,229 +44,202 @@ logger = logging.getLogger(__name__)
 # =========================
 def run_pipeline(
     source: str,
-    language: str = "english"
-) -> dict:
+    language: str = "en"
+):
+
+    meeting_id = None
 
     try:
 
         logger.info(
-            "Starting AI Meeting Pipeline"
+            "Starting AI pipeline"
         )
 
-        # =========================
-        # Process Input
-        # =========================
-        logger.info(
-            "Processing audio/video input"
-        )
-
+        # -------------------------
+        # Process Audio
+        # -------------------------
         chunks = process_input(source)
 
-        # Validate chunks
-        if not chunks:
-
-            raise Exception(
-                "Audio processing failed"
-            )
-
         logger.info(
-            f"{len(chunks)} chunks created successfully"
+            f"{len(chunks)} chunks created"
         )
 
-        # =========================
+        # -------------------------
         # Transcription
-        # =========================
-        logger.info(
-            "Starting transcription"
-        )
-
-        transcript = transcribe_all(
-            chunks,
-            language=language
-        )
-
-        # Validate transcript
-        if not transcript:
-
-            raise Exception(
-                "Transcription failed"
+        # -------------------------
+        transcription_result = (
+            transcribe_all(
+                chunks,
+                language
             )
-
-        logger.info(
-            "Transcription completed"
         )
 
-        # =========================
-        # Generate AI Outputs
-        # =========================
-        logger.info(
-            "Generating meeting title"
+        transcript = (
+            transcription_result["text"]
         )
 
+        segments = (
+            transcription_result["segments"]
+        )
+
+        detected_language = (
+            transcription_result["language"]
+        )
+
+        # -------------------------
+        # Generate Title
+        # -------------------------
         title = generate_title(
             transcript
         )
 
-        logger.info(
-            "Generating summary"
+        # -------------------------
+        # Create DB Record
+        # -------------------------
+        meeting_id = create_meeting(
+
+            source=source,
+
+            language=detected_language,
+
+            title=title,
+
+            file_type=os.path.splitext(
+                source
+            )[1]
+            if os.path.isfile(source)
+            else "youtube"
         )
 
+        # -------------------------
+        # Summarization
+        # -------------------------
         summary = summarize(
             transcript
         )
 
-        logger.info(
-            "Extracting action items"
-        )
-
+        # -------------------------
+        # Extract Structured Data
+        # -------------------------
         action_items = (
             extract_action_items(
                 transcript
             )
         )
 
-        logger.info(
-            "Extracting key decisions"
-        )
-
-        decisions = (
+        key_decisions = (
             extract_key_decisions(
                 transcript
             )
         )
 
-        logger.info(
-            "Extracting open questions"
-        )
-
-        questions = (
+        open_questions = (
             extract_questions(
                 transcript
             )
         )
 
-        # =========================
-        # Create DB Record
-        # =========================
-        logger.info(
-            "Creating database record"
-        )
-
-        meeting_id = create_meeting(
-            source,
-            language,
-            title
-        )
-
-        logger.info(
-            f"Meeting created with ID: {meeting_id}"
-        )
-
-        # =========================
+        # -------------------------
         # Save Transcript
-        # =========================
-        logger.info(
-            "Saving transcript file"
+        # -------------------------
+        transcript_path = (
+            save_transcript(
+                meeting_id,
+                transcript
+            )
         )
 
-        transcript_path = save_transcript(
-            meeting_id,
-            transcript
+        # -------------------------
+        # Save Summary JSON
+        # -------------------------
+        summary_data = {
+
+            "segments": segments,
+
+            "summary": summary,
+
+            "action_items":
+                action_items,
+
+            "key_decisions":
+                key_decisions,
+
+            "open_questions":
+                open_questions
+        }
+
+        summary_path = (
+            save_summary(
+                meeting_id,
+                summary_data
+            )
         )
 
-        logger.info(
-            "Transcript saved successfully"
-        )
-
-        # =========================
-        # Build Vector Database
-        # =========================
-        logger.info(
-            "Building vector database"
-        )
-
+        # -------------------------
+        # Build Vector Store
+        # -------------------------
         build_vector_store(
             meeting_id,
             transcript
         )
 
-        logger.info(
-            "Vector database created"
-        )
-
-        # =========================
-        # Prepare Summary JSON
-        # =========================
-        summary_data = {
-            "summary": summary,
-            "action_items": action_items,
-            "key_decisions": decisions,
-            "open_questions": questions
-        }
-
-        # =========================
-        # Save Summary JSON
-        # =========================
-        logger.info(
-            "Saving summary JSON"
-        )
-
-        summary_path = save_summary(
-            meeting_id,
-            summary_data
-        )
-
-        logger.info(
-            "Summary JSON saved"
-        )
-
-        # =========================
-        # Update DB With File Paths
-        # =========================
-        logger.info(
-            "Updating database with file paths"
-        )
-
+        # -------------------------
+        # Update DB
+        # -------------------------
         update_meeting_files(
-            meeting_id,
-            transcript_path,
-            summary_path
-        )
 
-        logger.info(
-            "Database updated successfully"
+            meeting_id,
+
+            transcript_path,
+
+            summary_path,
+
+            vector_store_path=(
+                f"vector_db/meeting_{meeting_id}"
+            )
         )
 
         logger.info(
             "Pipeline completed successfully"
         )
 
-        # =========================
-        # Final Response
-        # =========================
         return {
 
-            "meeting_id": meeting_id,
+            "meeting_id":
+                meeting_id,
 
-            "title": title,
+            "title":
+                title,
 
-            "transcript": transcript,
+            "language":
+                detected_language,
 
-            "summary": summary,
+            "summary":
+                summary,
 
-            "action_items": action_items,
+            "action_items":
+                action_items,
 
-            "key_decisions": decisions,
+            "key_decisions":
+                key_decisions,
 
-            "open_questions": questions
+            "open_questions":
+                open_questions
         }
 
     except Exception as e:
 
         logger.error(
-            f"Pipeline failed: {str(e)}"
+            f"Pipeline failed: {e}"
         )
 
+        if meeting_id:
+
+            mark_meeting_failed(
+                meeting_id,
+                str(e)
+            )
+
         raise Exception(
-            f"Pipeline Error: {str(e)}"
+            f"Pipeline Error: {e}"
         )

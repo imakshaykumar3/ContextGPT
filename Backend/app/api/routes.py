@@ -1,39 +1,75 @@
+#app/api/routes.py
 from fastapi import (
     APIRouter,
     HTTPException,
     UploadFile,
     File,
-    Form
+    Form,
+    Depends
 )
+
+from sqlalchemy.orm import Session
 
 from pydantic import BaseModel
 
 import os
 import json
+import uuid
+import logging
 
 from app.services.pipeline import run_pipeline
 
-from app.db.database import SessionLocal
+
+from app.db.database import get_db
 from app.db.models import Meeting
 
 from app.rag.rag_engine import (
     ask_question
 )
 
+from app.config.settings import (
+    UPLOAD_DIR,
+    MAX_FILE_SIZE,
+    ALLOWED_EXTENSIONS
+)
 
+
+# =========================
+# Router
+# =========================
 router = APIRouter()
+
+
+# =========================
+# Logger
+# =========================
+logger = logging.getLogger(__name__)
 
 
 # =========================
 # Request Schemas
 # =========================
 class ProcessRequest(BaseModel):
+
     source: str
+
     language: str = "en"
 
 
 class ChatRequest(BaseModel):
+
     question: str
+
+
+# =========================
+# Health Check
+# =========================
+@router.get("/health")
+def health():
+
+    return {
+        "status": "healthy"
+    }
 
 
 # =========================
@@ -51,18 +87,32 @@ def home():
 # Process YouTube URL
 # =========================
 @router.post("/process-url")
-def process_url(request: ProcessRequest):
+def process_url(
+    request: ProcessRequest
+):
 
     try:
+
+        logger.info(
+            "Processing YouTube URL"
+        )
 
         result = run_pipeline(
             request.source,
             request.language
         )
 
+        logger.info(
+            "YouTube processing completed"
+        )
+
         return result
 
     except Exception as e:
+
+        logger.error(
+            f"URL processing failed: {e}"
+        )
 
         raise HTTPException(
             status_code=500,
@@ -81,11 +131,15 @@ async def upload_file(
 
     try:
 
-        # Create uploads directory
-        os.makedirs("uploads", exist_ok=True)
+        logger.info(
+            "Processing uploaded file"
+        )
 
-        # File size limit (60 MB)
-        MAX_FILE_SIZE = 60 * 1024 * 1024
+        # Create upload directory
+        os.makedirs(
+            UPLOAD_DIR,
+            exist_ok=True
+        )
 
         # Read uploaded file
         contents = await file.read()
@@ -95,35 +149,47 @@ async def upload_file(
 
             raise HTTPException(
                 status_code=400,
-                detail="File size exceeds 60 MB limit"
+                detail=(
+                    "File size exceeds "
+                    "allowed limit"
+                )
             )
-
-        # Allowed file extensions
-        allowed_extensions = [
-            ".mp3",
-            ".wav",
-            ".mp4",
-            ".m4a"
-        ]
 
         # Validate extension
         ext = os.path.splitext(
             file.filename
         )[1].lower()
 
-        if ext not in allowed_extensions:
+        if ext not in ALLOWED_EXTENSIONS:
 
             raise HTTPException(
                 status_code=400,
-                detail="Unsupported file format"
+                detail=(
+                    "Unsupported file format"
+                )
             )
 
-        # Save uploaded file
-        file_path = f"uploads/{file.filename}"
+        # Generate unique filename
+        unique_filename = (
+            f"{uuid.uuid4()}{ext}"
+        )
 
-        with open(file_path, "wb") as buffer:
+        # Save uploaded file
+        file_path = os.path.join(
+            UPLOAD_DIR,
+            unique_filename
+        )
+
+        with open(
+            file_path,
+            "wb"
+        ) as buffer:
 
             buffer.write(contents)
+
+        logger.info(
+            f"File saved: {file_path}"
+        )
 
         # Run AI pipeline
         result = run_pipeline(
@@ -131,9 +197,17 @@ async def upload_file(
             language
         )
 
+        logger.info(
+            "File processing completed"
+        )
+
         return result
 
     except Exception as e:
+
+        logger.error(
+            f"File upload failed: {e}"
+        )
 
         raise HTTPException(
             status_code=500,
@@ -145,13 +219,20 @@ async def upload_file(
 # Get Stored Meeting
 # =========================
 @router.get("/meeting/{meeting_id}")
-def get_meeting(meeting_id: int):
-
-    db = SessionLocal()
+def get_meeting(
+    meeting_id: int,
+    db: Session = Depends(get_db)
+):
 
     try:
 
-        meeting = db.query(Meeting).filter(
+        logger.info(
+            f"Fetching meeting {meeting_id}"
+        )
+
+        meeting = db.query(
+            Meeting
+        ).filter(
             Meeting.id == meeting_id
         ).first()
 
@@ -163,7 +244,7 @@ def get_meeting(meeting_id: int):
                 detail="Meeting not found"
             )
 
-        # Load transcript text
+        # Load transcript
         with open(
             meeting.transcript_path,
             "r",
@@ -181,7 +262,11 @@ def get_meeting(meeting_id: int):
 
             summary_data = json.load(f)
 
-        # Return final response
+        logger.info(
+            "Meeting fetched successfully"
+        )
+
+        # Return response
         return {
 
             "id": meeting.id,
@@ -194,20 +279,44 @@ def get_meeting(meeting_id: int):
 
             "transcript": transcript_text,
 
-            "summary": summary_data["summary"],
+            "segments": summary_data.get(
+                "segments",
+                []
+            ),
 
-            "action_items": summary_data["action_items"],
+            "summary": summary_data.get(
+                "summary",
+                {}
+            ),
 
-            "key_decisions": summary_data["key_decisions"],
+            "action_items": summary_data.get(
+                "action_items",
+                []
+            ),
 
-            "open_questions": summary_data["open_questions"],
+            "key_decisions": summary_data.get(
+                "key_decisions",
+                []
+            ),
+
+            "open_questions": summary_data.get(
+                "open_questions",
+                []
+            ),
 
             "created_at": meeting.created_at
         }
 
-    finally:
+    except Exception as e:
 
-        db.close()
+        logger.error(
+            f"Get meeting failed: {e}"
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
 
 
 # =========================
@@ -221,9 +330,18 @@ def chat_with_meeting(
 
     try:
 
+        logger.info(
+            f"Chat started for "
+            f"meeting {meeting_id}"
+        )
+
         result = ask_question(
             meeting_id,
             request.question
+        )
+
+        logger.info(
+            "Chat response generated"
         )
 
         return {
@@ -232,16 +350,22 @@ def chat_with_meeting(
 
             "question": request.question,
 
-            "rewritten_query": result[
-                "rewritten_query"
-            ],
+            "rewritten_query": result.get(
+                "rewritten_query",
+                ""
+            ),
 
-            "answer": result[
-                "answer"
-            ]
+            "answer": result.get(
+                "answer",
+                ""
+            )
         }
 
     except Exception as e:
+
+        logger.error(
+            f"Chat failed: {e}"
+        )
 
         raise HTTPException(
             status_code=500,
