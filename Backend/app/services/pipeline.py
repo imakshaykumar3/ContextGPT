@@ -1,5 +1,8 @@
-import logging
+# app/services/pipeline.py
+
 import os
+import logging
+import asyncio
 
 from app.utils.audio_processor import (
     process_input
@@ -15,8 +18,11 @@ from app.core.summarize import (
 )
 
 from app.core.extractor import (
+
     extract_action_items,
+
     extract_key_decisions,
+
     extract_questions
 )
 
@@ -25,25 +31,35 @@ from app.rag.vector_store import (
 )
 
 from app.services.storage_service import (
+
     save_transcript,
+
     save_summary
 )
 
 from app.services.db_service import (
+
     create_meeting,
+
     update_meeting_files,
+
     mark_meeting_failed
 )
 
 
+# =========================
+# Logger
+# =========================
 logger = logging.getLogger(__name__)
 
 
 # =========================
 # Main AI Pipeline
 # =========================
-def run_pipeline(
+async def run_pipeline(
+
     source: str,
+
     language: str = "en"
 ):
 
@@ -57,8 +73,14 @@ def run_pipeline(
 
         # -------------------------
         # Process Audio
+        # CPU-bound
         # -------------------------
-        chunks = process_input(source)
+        chunks = await asyncio.to_thread(
+
+            process_input,
+
+            source
+        )
 
         logger.info(
             f"{len(chunks)} chunks created"
@@ -66,10 +88,15 @@ def run_pipeline(
 
         # -------------------------
         # Transcription
+        # CPU-bound Whisper
         # -------------------------
         transcription_result = (
-            transcribe_all(
+            await asyncio.to_thread(
+
+                transcribe_all,
+
                 chunks,
+
                 language
             )
         )
@@ -88,15 +115,16 @@ def run_pipeline(
 
         # -------------------------
         # Generate Title
+        # LLM async
         # -------------------------
-        title = generate_title(
+        title = await generate_title(
             transcript
         )
 
         # -------------------------
         # Create DB Record
         # -------------------------
-        meeting_id = create_meeting(
+        meeting_id = await create_meeting(
 
             source=source,
 
@@ -112,39 +140,58 @@ def run_pipeline(
         )
 
         # -------------------------
-        # Summarization
+        # Parallel AI Tasks
         # -------------------------
-        summary = summarize(
+        summary_task = summarize(
             transcript
         )
 
-        # -------------------------
-        # Extract Structured Data
-        # -------------------------
-        action_items = (
+        action_items_task = (
             extract_action_items(
                 transcript
             )
         )
 
-        key_decisions = (
+        key_decisions_task = (
             extract_key_decisions(
                 transcript
             )
         )
 
-        open_questions = (
+        open_questions_task = (
             extract_questions(
                 transcript
             )
+        )
+
+        (
+            summary,
+
+            action_items,
+
+            key_decisions,
+
+            open_questions
+
+        ) = await asyncio.gather(
+
+            summary_task,
+
+            action_items_task,
+
+            key_decisions_task,
+
+            open_questions_task
         )
 
         # -------------------------
         # Save Transcript
         # -------------------------
         transcript_path = (
-            save_transcript(
+            await save_transcript(
+
                 meeting_id,
+
                 transcript
             )
         )
@@ -154,9 +201,11 @@ def run_pipeline(
         # -------------------------
         summary_data = {
 
-            "segments": segments,
+            "segments":
+                segments,
 
-            "summary": summary,
+            "summary":
+                summary,
 
             "action_items":
                 action_items,
@@ -169,24 +218,31 @@ def run_pipeline(
         }
 
         summary_path = (
-            save_summary(
+            await save_summary(
+
                 meeting_id,
+
                 summary_data
             )
         )
 
         # -------------------------
         # Build Vector Store
+        # CPU-bound embeddings
         # -------------------------
-        build_vector_store(
+        await asyncio.to_thread(
+
+            build_vector_store,
+
             meeting_id,
+
             transcript
         )
 
         # -------------------------
         # Update DB
         # -------------------------
-        update_meeting_files(
+        await update_meeting_files(
 
             meeting_id,
 
@@ -195,6 +251,7 @@ def run_pipeline(
             summary_path,
 
             vector_store_path=(
+
                 f"vector_db/meeting_{meeting_id}"
             )
         )
@@ -235,8 +292,10 @@ def run_pipeline(
 
         if meeting_id:
 
-            mark_meeting_failed(
+            await mark_meeting_failed(
+
                 meeting_id,
+
                 str(e)
             )
 

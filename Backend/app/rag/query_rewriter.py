@@ -1,4 +1,7 @@
-#app/rag/query_rewriter.py
+# app/rag/query_rewriter.py
+
+import logging
+
 from langchain_openai import (
     ChatOpenAI
 )
@@ -23,6 +26,15 @@ from app.rag.prompts import (
 )
 
 
+# =========================
+# Logger
+# =========================
+logger = logging.getLogger(__name__)
+
+
+# =========================
+# Shared LLM
+# =========================
 llm = ChatOpenAI(
 
     model=GPT_MODEL,
@@ -33,29 +45,74 @@ llm = ChatOpenAI(
 )
 
 
-def rewrite_query(
+# =========================
+# Shared Prompt
+# =========================
+rewrite_prompt = (
+    ChatPromptTemplate.from_messages([
+
+        (
+            "system",
+
+            QUERY_REWRITE_PROMPT
+        ),
+
+        (
+            "human",
+
+            "{question}"
+        )
+    ])
+)
+
+
+# =========================
+# Shared Chain
+# =========================
+rewrite_chain = (
+
+    rewrite_prompt
+
+    | llm
+
+    | StrOutputParser()
+)
+
+
+# =========================
+# Rewrite Query
+# =========================
+async def rewrite_query(
     question: str
-):
+) -> str:
 
-    prompt = (
-        ChatPromptTemplate.from_messages([
-            (
-                "system",
-                QUERY_REWRITE_PROMPT
-            ),
-            (
-                "human",
-                "{question}"
-            )
-        ])
-    )
+    try:
 
-    chain = (
-        prompt
-        | llm
-        | StrOutputParser()
-    )
+        logger.info(
+            f"Rewriting query: "
+            f"{question}"
+        )
 
-    return chain.invoke({
-        "question": question
-    }).strip()
+        rewritten_query = (
+            await rewrite_chain.ainvoke({
+
+                "question":
+                    question
+            })
+        ).strip()
+
+        logger.info(
+            f"Rewritten query: "
+            f"{rewritten_query}"
+        )
+
+        return rewritten_query
+
+    except Exception as e:
+
+        logger.error(
+            f"Query rewrite failed: {e}"
+        )
+
+        # Fallback
+        return question

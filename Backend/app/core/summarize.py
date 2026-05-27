@@ -1,16 +1,22 @@
 # app/core/summarize.py
+
 import logging
+import asyncio
 
 from dotenv import load_dotenv
 
-from langchain_openai import ChatOpenAI
+from langchain_openai import (
+    ChatOpenAI
+)
 
 from langchain_core.prompts import (
     ChatPromptTemplate
 )
 
 from langchain_core.output_parsers import (
+
     JsonOutputParser,
+
     StrOutputParser
 )
 
@@ -19,18 +25,27 @@ from langchain_text_splitters import (
 )
 
 from langchain_core.runnables import (
+
     RunnablePassthrough,
+
     RunnableLambda
 )
 
 from app.config.settings import (
+
     GPT_MODEL,
+
     OPENAI_API_KEY,
+
     SUMMARY_CHUNK_SIZE,
+
     SUMMARY_CHUNK_OVERLAP
 )
 
 
+# =========================
+# Load Environment
+# =========================
 load_dotenv()
 
 
@@ -44,12 +59,18 @@ logger = logging.getLogger(__name__)
 # Shared LLM
 # =========================
 llm_model = ChatOpenAI(
+
     model=GPT_MODEL,
+
     openai_api_key=OPENAI_API_KEY,
+
     temperature=0.3
 )
 
 
+# =========================
+# Get Shared LLM
+# =========================
 def get_llm():
 
     return llm_model
@@ -64,20 +85,31 @@ summary_parser = JsonOutputParser()
 # =========================
 # Split Transcript
 # =========================
-def split_transcript(transcript: str) -> list:
+def split_transcript(
+    transcript: str
+) -> list:
 
-    logger.info("Splitting transcript")
+    logger.info(
+        "Splitting transcript"
+    )
 
     splitter = (
         RecursiveCharacterTextSplitter(
+
             chunk_size=SUMMARY_CHUNK_SIZE,
+
             chunk_overlap=SUMMARY_CHUNK_OVERLAP,
         )
     )
 
-    chunks = splitter.split_text(transcript)
+    chunks = splitter.split_text(
+        transcript
+    )
 
-    logger.info(f"{len(chunks)} summary chunks created")
+    logger.info(
+        f"{len(chunks)} "
+        f"summary chunks created"
+    )
 
     return chunks
 
@@ -85,9 +117,13 @@ def split_transcript(transcript: str) -> list:
 # =========================
 # Generate Structured Summary
 # =========================
-def summarize(transcript: str):
+async def summarize(
+    transcript: str
+):
 
-    logger.info("Starting summarization")
+    logger.info(
+        "Starting summarization"
+    )
 
     llm = get_llm()
 
@@ -96,6 +132,7 @@ def summarize(transcript: str):
     # -------------------------
     map_prompt = (
         ChatPromptTemplate.from_messages([
+
             (
                 "system",
                 """
@@ -113,6 +150,7 @@ def summarize(transcript: str):
                 Keep summary concise.
                 """
             ),
+
             (
                 "human",
                 "{text}"
@@ -121,31 +159,49 @@ def summarize(transcript: str):
     )
 
     map_chain = (
+
         map_prompt
+
         | llm
+
         | StrOutputParser()
     )
 
-    chunks = split_transcript(transcript)
+    # -------------------------
+    # Split Chunks
+    # -------------------------
+    chunks = split_transcript(
+        transcript
+    )
 
-    logger.info("Generating chunk summaries")
-
-    chunk_summaries = [
-
-        map_chain.invoke({
-            "text": chunk
-        })
-
-        for chunk in chunks
-    ]
+    logger.info(
+        "Generating chunk summaries"
+    )
 
     # -------------------------
-    # COMBINE STEP
+    # Parallel Chunk Summaries
     # -------------------------
-    combined = "\n\n".join(chunk_summaries)
+    chunk_summaries = await asyncio.gather(
+
+        *[
+            map_chain.ainvoke({
+                "text": chunk
+            })
+
+            for chunk in chunks
+        ]
+    )
+
+    # -------------------------
+    # Combine Summaries
+    # -------------------------
+    combined = "\n\n".join(
+        chunk_summaries
+    )
 
     combine_prompt = (
         ChatPromptTemplate.from_messages([
+
             (
                 "system",
                 """
@@ -189,6 +245,7 @@ def summarize(transcript: str):
                 - risks must be array
                 """
             ),
+
             (
                 "human",
                 "{text}"
@@ -201,7 +258,9 @@ def summarize(transcript: str):
         RunnablePassthrough()
 
         | RunnableLambda(
-            lambda x: {"text": x}
+            lambda x: {
+                "text": x
+            }
         )
 
         | combine_prompt
@@ -211,9 +270,15 @@ def summarize(transcript: str):
         | summary_parser
     )
 
-    final_summary = combine_chain.invoke(combined)
+    final_summary = (
+        await combine_chain.ainvoke(
+            combined
+        )
+    )
 
-    logger.info("Structured summarization completed")
+    logger.info(
+        "Structured summarization completed"
+    )
 
     return final_summary
 
@@ -221,7 +286,9 @@ def summarize(transcript: str):
 # =========================
 # Generate Meeting Title
 # =========================
-def generate_title(transcript: str) -> str:
+async def generate_title(
+    transcript: str
+) -> str:
 
     logger.info(
         "Generating meeting title"
@@ -231,6 +298,7 @@ def generate_title(transcript: str) -> str:
 
     title_prompt = (
         ChatPromptTemplate.from_messages([
+
             (
                 "system",
                 """
@@ -244,6 +312,7 @@ def generate_title(transcript: str) -> str:
                 - Return title only
                 """
             ),
+
             (
                 "human",
                 "{transcript}"
@@ -268,8 +337,14 @@ def generate_title(transcript: str) -> str:
         | StrOutputParser()
     )
 
-    title = title_chain.invoke(transcript).strip()
+    title = (
+        await title_chain.ainvoke(
+            transcript
+        )
+    ).strip()
 
-    logger.info(f"Generated title: {title}")
+    logger.info(
+        f"Generated title: {title}"
+    )
 
     return title

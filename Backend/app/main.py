@@ -1,5 +1,10 @@
 # app/main.py
+
 import logging
+
+from contextlib import (
+    asynccontextmanager
+)
 
 from fastapi import (
     FastAPI
@@ -22,12 +27,62 @@ from app.db.init_db import (
 # Configure Logging
 # =========================
 logging.basicConfig(
-    level=logging.INFO
+
+    level=logging.INFO,
+
+    format=(
+        "%(asctime)s | "
+        "%(levelname)s | "
+        "%(name)s | "
+        "%(message)s"
+    )
 )
 
 logger = logging.getLogger(
     __name__
 )
+
+
+# =========================
+# Lifespan Handler
+# =========================
+@asynccontextmanager
+async def lifespan(
+    app: FastAPI
+):
+
+    try:
+
+        logger.info(
+            "Starting application"
+        )
+
+        # Initialize database
+        await init_db()
+
+        logger.info(
+            "Database initialized"
+        )
+
+        logger.info(
+            "Application startup complete"
+        )
+
+        yield
+
+    except Exception as e:
+
+        logger.error(
+            f"Startup failed: {e}"
+        )
+
+        raise
+
+    finally:
+
+        logger.info(
+            "Application shutdown"
+        )
 
 
 # =========================
@@ -42,7 +97,9 @@ app = FastAPI(
         "Intelligence Platform"
     ),
 
-    version="1.0.0"
+    version="1.0.0",
+
+    lifespan=lifespan
 )
 
 
@@ -53,6 +110,8 @@ app.add_middleware(
 
     CORSMiddleware,
 
+    # WARNING:
+    # Replace "*" in production
     allow_origins=["*"],
 
     allow_credentials=True,
@@ -64,36 +123,18 @@ app.add_middleware(
 
 
 # =========================
-# Startup Event
-# =========================
-@app.on_event("startup")
-def startup_event():
-
-    logger.info(
-        "Starting application"
-    )
-
-    # Initialize database
-    init_db()
-
-    logger.info(
-        "Application startup complete"
-    )
-
-
-# =========================
 # Root Route
 # =========================
 @app.get("/")
-def root():
+async def root():
 
     return {
 
-        "message": (
-            "AI Meeting Assistant API"
-        ),
+        "message":
+            "AI Meeting Assistant API",
 
-        "status": "running"
+        "status":
+            "running"
     }
 
 
@@ -106,5 +147,7 @@ app.include_router(
 
     prefix="/api",
 
-    tags=["AI Meeting Assistant"]
+    tags=[
+        "AI Meeting Assistant"
+    ]
 )

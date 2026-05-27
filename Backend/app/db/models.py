@@ -1,4 +1,7 @@
 # app/db/models.py
+
+from datetime import datetime
+
 from sqlalchemy import (
 
     Column,
@@ -7,10 +10,12 @@ from sqlalchemy import (
 
     String,
 
-    DateTime
+    DateTime,
+
+    Text
 )
 
-from datetime import datetime
+from sqlalchemy.sql import func
 
 from app.db.database import Base
 
@@ -19,36 +24,48 @@ class Meeting(Base):
 
     __tablename__ = "meetings"
 
+
     # =========================
     # Primary Key
     # =========================
     id = Column(
+
         Integer,
+
         primary_key=True,
+
         index=True
     )
+
 
     # =========================
     # Meeting Metadata
     # =========================
     title = Column(
+
         String,
+
         nullable=False
     )
 
     source = Column(
+
         String,
+
         nullable=False
     )
 
     language = Column(
+
         String,
+
         nullable=False
     )
 
     file_type = Column(
         String
     )
+
 
     # =========================
     # File Storage
@@ -65,28 +82,39 @@ class Meeting(Base):
         String
     )
 
+
     # =========================
     # Processing State
     # =========================
     status = Column(
+
         String,
-        default="processing"
+
+        default="processing",
+
+        index=True
     )
 
     error_message = Column(
-        String
+        Text
     )
+
 
     # =========================
     # Timestamps
     # =========================
     created_at = Column(
-        DateTime,
-        default=datetime.utcnow
+
+        DateTime(timezone=True),
+
+        server_default=func.now()
     )
 
     updated_at = Column(
-        DateTime,
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow
+
+        DateTime(timezone=True),
+
+        server_default=func.now(),
+
+        onupdate=func.now()
     )

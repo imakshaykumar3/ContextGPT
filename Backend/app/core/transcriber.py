@@ -1,21 +1,31 @@
-#app/core/transcriber.py
+# app/core/transcriber.py
+
 import logging
+import threading
+
+from dotenv import load_dotenv
 
 from faster_whisper import (
     WhisperModel
 )
 
-from dotenv import load_dotenv
-
 from app.config.settings import (
+
     WHISPER_MODEL,
+
     WHISPER_DEVICE,
+
     WHISPER_COMPUTE_TYPE,
+
     WHISPER_BEAM_SIZE,
+
     WHISPER_VAD_FILTER
 )
 
 
+# =========================
+# Load Environment
+# =========================
 load_dotenv()
 
 
@@ -30,7 +40,12 @@ logger = logging.getLogger(__name__)
 # =========================
 _model = None
 
+_model_lock = threading.Lock()
 
+
+# =========================
+# Load Whisper Model
+# =========================
 def load_whisper_model():
 
     """
@@ -42,18 +57,29 @@ def load_whisper_model():
 
     if _model is None:
 
-        logger.info(
-            f"Loading Whisper model: "
-            f"{WHISPER_MODEL}"
-        )
+        with _model_lock:
 
-        _model = WhisperModel(
-            WHISPER_MODEL,
-            device=WHISPER_DEVICE,
-            compute_type=WHISPER_COMPUTE_TYPE
-        )
+            if _model is None:
 
-        logger.info("Whisper model loaded successfully")
+                logger.info(
+                    f"Loading Whisper model: "
+                    f"{WHISPER_MODEL}"
+                )
+
+                _model = WhisperModel(
+
+                    WHISPER_MODEL,
+
+                    device=WHISPER_DEVICE,
+
+                    compute_type=(
+                        WHISPER_COMPUTE_TYPE
+                    )
+                )
+
+                logger.info(
+                    "Whisper model loaded successfully"
+                )
 
     return _model
 
@@ -61,7 +87,12 @@ def load_whisper_model():
 # =========================
 # Transcribe Single Chunk
 # =========================
-def transcribe_chunk(chunk_path: str,language: str = "en"):
+def transcribe_chunk(
+
+    chunk_path: str,
+
+    language: str = "en"
+) -> dict:
 
     try:
 
@@ -73,6 +104,7 @@ def transcribe_chunk(chunk_path: str,language: str = "en"):
         model = load_whisper_model()
 
         segments, info = model.transcribe(
+
             chunk_path,
 
             beam_size=WHISPER_BEAM_SIZE,
@@ -86,17 +118,34 @@ def transcribe_chunk(chunk_path: str,language: str = "en"):
 
         for segment in segments:
 
+            text = segment.text.strip()
+
+            # Skip empty text
+            if not text:
+                continue
+
             transcript_segments.append({
 
-                "start": round(segment.start,2),
+                "start":
+                    round(
+                        segment.start,
+                        2
+                    ),
 
-                "end": round(segment.end,2),
+                "end":
+                    round(
+                        segment.end,
+                        2
+                    ),
 
-                "text": segment.text.strip()
+                "text":
+                    text
             })
 
         full_text = " ".join([
+
             segment["text"]
+
             for segment in transcript_segments
         ])
 
@@ -107,11 +156,14 @@ def transcribe_chunk(chunk_path: str,language: str = "en"):
 
         return {
 
-            "text": full_text,
+            "text":
+                full_text,
 
-            "segments": transcript_segments,
+            "segments":
+                transcript_segments,
 
-            "language": info.language,
+            "language":
+                info.language,
 
             "language_probability":
                 round(
@@ -142,9 +194,16 @@ def transcribe_chunk(chunk_path: str,language: str = "en"):
 # =========================
 # Transcribe All Chunks
 # =========================
-def transcribe_all(chunks: list[str],language: str = "en"):
+def transcribe_all(
 
-    logger.info("Starting full transcription")
+    chunks: list[str],
+
+    language: str = "en"
+) -> dict:
+
+    logger.info(
+        "Starting full transcription"
+    )
 
     transcripts = []
 
@@ -159,23 +218,41 @@ def transcribe_all(chunks: list[str],language: str = "en"):
             f"{i+1}/{len(chunks)}"
         )
 
-        result = transcribe_chunk(chunk, language)
+        result = transcribe_chunk(
 
-        transcripts.append(result["text"])
+            chunk,
 
-        all_segments.extend(result["segments"])
+            language
+        )
 
-        detected_language = (result["language"])
+        transcripts.append(
+            result["text"]
+        )
 
-    full_transcript = " ".join(transcripts).strip()
+        all_segments.extend(
+            result["segments"]
+        )
 
-    logger.info("Full transcription completed")
+        detected_language = (
+            result["language"]
+        )
+
+    full_transcript = " ".join(
+        transcripts
+    ).strip()
+
+    logger.info(
+        "Full transcription completed"
+    )
 
     return {
 
-        "text": full_transcript,
+        "text":
+            full_transcript,
 
-        "segments": all_segments,
+        "segments":
+            all_segments,
 
-        "language": detected_language
+        "language":
+            detected_language
     }

@@ -1,35 +1,59 @@
-#app/api/routes.py
+# app/api/routes.py
+
 from fastapi import (
+
     APIRouter,
+
     HTTPException,
+
     UploadFile,
+
     File,
+
     Form,
+
     Depends
 )
 
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import (
+    AsyncSession
+)
+
+from sqlalchemy import (
+    select
+)
 
 from pydantic import BaseModel
 
 import os
-import json
 import uuid
+import json
 import logging
+import asyncio
+import aiofiles
 
-from app.services.pipeline import run_pipeline
+from app.services.pipeline import (
+    run_pipeline
+)
 
+from app.db.database import (
+    get_db
+)
 
-from app.db.database import get_db
-from app.db.models import Meeting
+from app.db.models import (
+    Meeting
+)
 
 from app.rag.rag_engine import (
     ask_question
 )
 
 from app.config.settings import (
+
     UPLOAD_DIR,
+
     MAX_FILE_SIZE,
+
     ALLOWED_EXTENSIONS
 )
 
@@ -65,7 +89,7 @@ class ChatRequest(BaseModel):
 # Health Check
 # =========================
 @router.get("/health")
-def health():
+async def health():
 
     return {
         "status": "healthy"
@@ -76,10 +100,11 @@ def health():
 # Home Route
 # =========================
 @router.get("/")
-def home():
+async def home():
 
     return {
-        "message": "AI Meeting Assistant API Running"
+        "message":
+            "AI Meeting Assistant API Running"
     }
 
 
@@ -87,7 +112,7 @@ def home():
 # Process YouTube URL
 # =========================
 @router.post("/process-url")
-def process_url(
+async def process_url(
     request: ProcessRequest
 ):
 
@@ -97,8 +122,11 @@ def process_url(
             "Processing YouTube URL"
         )
 
-        result = run_pipeline(
+        # Run async pipeline
+        result = await run_pipeline(
+
             request.source,
+
             request.language
         )
 
@@ -108,6 +136,9 @@ def process_url(
 
         return result
 
+    except HTTPException:
+        raise
+
     except Exception as e:
 
         logger.error(
@@ -115,7 +146,9 @@ def process_url(
         )
 
         raise HTTPException(
+
             status_code=500,
+
             detail=str(e)
         )
 
@@ -125,7 +158,9 @@ def process_url(
 # =========================
 @router.post("/upload-file")
 async def upload_file(
+
     file: UploadFile = File(...),
+
     language: str = Form("en")
 ):
 
@@ -135,25 +170,13 @@ async def upload_file(
             "Processing uploaded file"
         )
 
-        # Create upload directory
+        # Ensure upload directory exists
         os.makedirs(
+
             UPLOAD_DIR,
+
             exist_ok=True
         )
-
-        # Read uploaded file
-        contents = await file.read()
-
-        # Validate file size
-        if len(contents) > MAX_FILE_SIZE:
-
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    "File size exceeds "
-                    "allowed limit"
-                )
-            )
 
         # Validate extension
         ext = os.path.splitext(
@@ -163,7 +186,9 @@ async def upload_file(
         if ext not in ALLOWED_EXTENSIONS:
 
             raise HTTPException(
+
                 status_code=400,
+
                 detail=(
                     "Unsupported file format"
                 )
@@ -174,26 +199,63 @@ async def upload_file(
             f"{uuid.uuid4()}{ext}"
         )
 
-        # Save uploaded file
+        # Final save path
         file_path = os.path.join(
+
             UPLOAD_DIR,
+
             unique_filename
         )
 
-        with open(
+        # =========================
+        # Stream File Safely
+        # =========================
+        file_size = 0
+
+        chunk_size = 1024 * 1024  # 1MB
+
+        async with aiofiles.open(
             file_path,
             "wb"
         ) as buffer:
 
-            buffer.write(contents)
+            while chunk := await file.read(
+                chunk_size
+            ):
+
+                file_size += len(chunk)
+
+                # Validate file size
+                if file_size > MAX_FILE_SIZE:
+
+                    await file.close()
+
+                    raise HTTPException(
+
+                        status_code=400,
+
+                        detail=(
+                            "File size exceeds "
+                            "allowed limit"
+                        )
+                    )
+
+                await buffer.write(chunk)
 
         logger.info(
             f"File saved: {file_path}"
         )
 
-        # Run AI pipeline
-        result = run_pipeline(
+        # Close uploaded file
+        await file.close()
+
+        # =========================
+        # Run AI Pipeline
+        # =========================
+        result = await run_pipeline(
+
             file_path,
+
             language
         )
 
@@ -203,6 +265,9 @@ async def upload_file(
 
         return result
 
+    except HTTPException:
+        raise
+
     except Exception as e:
 
         logger.error(
@@ -210,7 +275,9 @@ async def upload_file(
         )
 
         raise HTTPException(
+
             status_code=500,
+
             detail=str(e)
         )
 
@@ -219,93 +286,175 @@ async def upload_file(
 # Get Stored Meeting
 # =========================
 @router.get("/meeting/{meeting_id}")
-def get_meeting(
+async def get_meeting(
+
     meeting_id: int,
-    db: Session = Depends(get_db)
+
+    db: AsyncSession = Depends(get_db)
 ):
 
     try:
 
         logger.info(
-            f"Fetching meeting {meeting_id}"
+            f"Fetching meeting "
+            f"{meeting_id}"
         )
 
-        meeting = db.query(
-            Meeting
-        ).filter(
-            Meeting.id == meeting_id
-        ).first()
+        # =========================
+        # Fetch Meeting
+        # =========================
+        result = await db.execute(
+
+            select(Meeting).where(
+                Meeting.id == meeting_id
+            )
+        )
+
+        meeting = (
+            result.scalar_one_or_none()
+        )
 
         # Meeting not found
         if not meeting:
 
             raise HTTPException(
+
                 status_code=404,
+
                 detail="Meeting not found"
             )
 
-        # Load transcript
-        with open(
+        # =========================
+        # Validate Files
+        # =========================
+        if not os.path.exists(
+            meeting.transcript_path
+        ):
+
+            raise HTTPException(
+
+                status_code=404,
+
+                detail=(
+                    "Transcript file missing"
+                )
+            )
+
+        if not os.path.exists(
+            meeting.summary_path
+        ):
+
+            raise HTTPException(
+
+                status_code=404,
+
+                detail=(
+                    "Summary file missing"
+                )
+            )
+
+        # =========================
+        # Load Transcript
+        # =========================
+        async with aiofiles.open(
+
             meeting.transcript_path,
+
             "r",
+
             encoding="utf-8"
         ) as f:
 
-            transcript_text = f.read()
+            transcript_text = (
+                await f.read()
+            )
 
-        # Load summary JSON
-        with open(
+        # =========================
+        # Load Summary JSON
+        # =========================
+        async with aiofiles.open(
+
             meeting.summary_path,
+
             "r",
+
             encoding="utf-8"
         ) as f:
 
-            summary_data = json.load(f)
+            summary_content = (
+                await f.read()
+            )
+
+            summary_data = json.loads(
+                summary_content
+            )
 
         logger.info(
             "Meeting fetched successfully"
         )
 
-        # Return response
         return {
 
-            "id": meeting.id,
+            "id":
+                meeting.id,
 
-            "title": meeting.title,
+            "title":
+                meeting.title,
 
-            "source": meeting.source,
+            "source":
+                meeting.source,
 
-            "language": meeting.language,
+            "language":
+                meeting.language,
 
-            "transcript": transcript_text,
+            "file_type":
+                meeting.file_type,
 
-            "segments": summary_data.get(
-                "segments",
-                []
-            ),
+            "status":
+                meeting.status,
 
-            "summary": summary_data.get(
-                "summary",
-                {}
-            ),
+            "transcript":
+                transcript_text,
 
-            "action_items": summary_data.get(
-                "action_items",
-                []
-            ),
+            "segments":
+                summary_data.get(
+                    "segments",
+                    []
+                ),
 
-            "key_decisions": summary_data.get(
-                "key_decisions",
-                []
-            ),
+            "summary":
+                summary_data.get(
+                    "summary",
+                    {}
+                ),
 
-            "open_questions": summary_data.get(
-                "open_questions",
-                []
-            ),
+            "action_items":
+                summary_data.get(
+                    "action_items",
+                    []
+                ),
 
-            "created_at": meeting.created_at
+            "key_decisions":
+                summary_data.get(
+                    "key_decisions",
+                    []
+                ),
+
+            "open_questions":
+                summary_data.get(
+                    "open_questions",
+                    []
+                ),
+
+            "created_at":
+                meeting.created_at,
+
+            "updated_at":
+                meeting.updated_at
         }
+
+    except HTTPException:
+        raise
 
     except Exception as e:
 
@@ -314,7 +463,9 @@ def get_meeting(
         )
 
         raise HTTPException(
+
             status_code=500,
+
             detail=str(e)
         )
 
@@ -323,8 +474,10 @@ def get_meeting(
 # Chat With Meeting
 # =========================
 @router.post("/chat/{meeting_id}")
-def chat_with_meeting(
+async def chat_with_meeting(
+
     meeting_id: int,
+
     request: ChatRequest
 ):
 
@@ -335,8 +488,13 @@ def chat_with_meeting(
             f"meeting {meeting_id}"
         )
 
-        result = ask_question(
+        # =========================
+        # Ask RAG Question
+        # =========================
+        result = await ask_question(
+
             meeting_id,
+
             request.question
         )
 
@@ -346,20 +504,27 @@ def chat_with_meeting(
 
         return {
 
-            "meeting_id": meeting_id,
+            "meeting_id":
+                meeting_id,
 
-            "question": request.question,
+            "question":
+                request.question,
 
-            "rewritten_query": result.get(
-                "rewritten_query",
-                ""
-            ),
+            "rewritten_query":
+                result.get(
+                    "rewritten_query",
+                    ""
+                ),
 
-            "answer": result.get(
-                "answer",
-                ""
-            )
+            "answer":
+                result.get(
+                    "answer",
+                    ""
+                )
         }
+
+    except HTTPException:
+        raise
 
     except Exception as e:
 
@@ -368,6 +533,8 @@ def chat_with_meeting(
         )
 
         raise HTTPException(
+
             status_code=500,
+
             detail=str(e)
         )

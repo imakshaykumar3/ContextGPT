@@ -1,4 +1,5 @@
-#app/utils/audio_processor.py
+# app/utils/audio_processor.py
+
 import os
 import uuid
 import logging
@@ -8,11 +9,17 @@ import yt_dlp
 from pydub import AudioSegment
 
 from app.config.settings import (
+
     DOWNLOAD_DIR,
+
     CHUNK_DIR,
+
     CHUNK_MINUTES,
+
     AUDIO_SAMPLE_RATE,
+
     AUDIO_CHANNELS,
+
     YOUTUBE_AUDIO_QUALITY
 )
 
@@ -26,73 +33,116 @@ logger = logging.getLogger(__name__)
 # =========================
 # Create Directories
 # =========================
-os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+os.makedirs(
 
-os.makedirs(CHUNK_DIR, exist_ok=True)
+    DOWNLOAD_DIR,
+
+    exist_ok=True
+)
+
+os.makedirs(
+
+    CHUNK_DIR,
+
+    exist_ok=True
+)
 
 
 # =========================
 # Download YouTube Audio
 # =========================
-def download_youtube_audio(url: str) -> str:
+def download_youtube_audio(
+    url: str
+) -> str:
 
-    logger.info("Downloading YouTube audio")
+    logger.info(
+        "Downloading YouTube audio"
+    )
 
     try:
 
-        # Generate unique filename
-        unique_id = str(uuid.uuid4())
+        # Unique filename
+        unique_id = str(
+            uuid.uuid4()
+        )
 
         output_path = os.path.join(
+
             DOWNLOAD_DIR,
+
             f"{unique_id}.%(ext)s"
         )
 
         ydl_opts = {
 
-            "format": "bestaudio/best",
+            "format":
+                "bestaudio/best",
 
-            "outtmpl": output_path,
+            "outtmpl":
+                output_path,
 
             "postprocessors": [
                 {
-                    "key": "FFmpegExtractAudio",
+                    "key":
+                        "FFmpegExtractAudio",
 
-                    "preferredcodec": "wav",
+                    "preferredcodec":
+                        "wav",
 
                     "preferredquality":
                         YOUTUBE_AUDIO_QUALITY,
                 }
             ],
 
-            "quiet": True,
+            "quiet":
+                True,
 
-            "no_warnings": True
+            "no_warnings":
+                True
         }
 
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        with yt_dlp.YoutubeDL(
+            ydl_opts
+        ) as ydl:
 
             info = ydl.extract_info(
+
                 url,
+
                 download=True
             )
 
             filename = (
+
                 os.path.splitext(
+
                     ydl.prepare_filename(
                         info
                     )
                 )[0]
+
                 + ".wav"
             )
 
-        logger.info("YouTube audio downloaded successfully")
+        if not os.path.exists(
+            filename
+        ):
+
+            raise Exception(
+                "Downloaded audio file missing"
+            )
+
+        logger.info(
+            "YouTube audio downloaded successfully"
+        )
 
         return filename
 
     except Exception as e:
 
-        logger.error(f"YouTube download failed: {e}")
+        logger.error(
+            f"YouTube download failed: {e}"
+        )
 
         raise Exception(
             "Failed to download YouTube audio"
@@ -112,11 +162,23 @@ def convert_to_wav(
 
     try:
 
-        output_path = (
-            os.path.splitext(
-                input_path
-            )[0]
-            + "_converted.wav"
+        if not os.path.exists(
+            input_path
+        ):
+
+            raise FileNotFoundError(
+                "Input file not found"
+            )
+
+        unique_id = str(
+            uuid.uuid4()
+        )
+
+        output_path = os.path.join(
+
+            DOWNLOAD_DIR,
+
+            f"{unique_id}_converted.wav"
         )
 
         audio = AudioSegment.from_file(
@@ -124,17 +186,22 @@ def convert_to_wav(
         )
 
         audio = (
+
             audio
+
             .set_channels(
                 AUDIO_CHANNELS
             )
+
             .set_frame_rate(
                 AUDIO_SAMPLE_RATE
             )
         )
 
         audio.export(
+
             output_path,
+
             format="wav"
         )
 
@@ -159,7 +226,9 @@ def convert_to_wav(
 # Chunk Audio
 # =========================
 def chunk_audio(
+
     wav_path: str,
+
     chunk_minutes: int = CHUNK_MINUTES
 ) -> list[str]:
 
@@ -169,25 +238,35 @@ def chunk_audio(
 
     try:
 
+        if not os.path.exists(
+            wav_path
+        ):
+
+            raise FileNotFoundError(
+                "WAV file not found"
+            )
+
         audio = AudioSegment.from_wav(
             wav_path
         )
 
         chunk_ms = (
+
             chunk_minutes
+
             * 60
+
             * 1000
         )
 
         chunks = []
 
-        base_name = os.path.splitext(
-            os.path.basename(
-                wav_path
-            )
-        )[0]
+        unique_id = str(
+            uuid.uuid4()
+        )
 
         for i, start in enumerate(
+
             range(
                 0,
                 len(audio),
@@ -201,12 +280,16 @@ def chunk_audio(
             ]
 
             chunk_path = os.path.join(
+
                 CHUNK_DIR,
-                f"{base_name}_chunk_{i}.wav"
+
+                f"{unique_id}_chunk_{i}.wav"
             )
 
             chunk.export(
+
                 chunk_path,
+
                 format="wav"
             )
 
@@ -232,15 +315,42 @@ def chunk_audio(
 
 
 # =========================
+# Cleanup Temporary Files
+# =========================
+def cleanup_files(
+    file_paths: list[str]
+):
+
+    for path in file_paths:
+
+        try:
+
+            if os.path.exists(path):
+
+                os.remove(path)
+
+        except Exception as e:
+
+            logger.warning(
+                f"Failed to remove "
+                f"{path}: {e}"
+            )
+
+
+# =========================
 # Process Input
 # =========================
 def process_input(
     source: str
 ) -> list[str]:
 
+    wav_path = None
+
     try:
 
+        # -------------------------
         # YouTube URL
+        # -------------------------
         if source.startswith(
             ("https://", "http://")
         ):
@@ -255,7 +365,9 @@ def process_input(
                 )
             )
 
+        # -------------------------
         # Local File
+        # -------------------------
         else:
 
             logger.info(
@@ -266,7 +378,9 @@ def process_input(
                 source
             )
 
-        # Chunk audio
+        # -------------------------
+        # Chunk Audio
+        # -------------------------
         chunks = chunk_audio(
             wav_path
         )

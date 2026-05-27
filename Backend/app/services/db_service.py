@@ -1,8 +1,13 @@
 # app/services/db_service.py
+
 import logging
 
+from sqlalchemy import (
+    select
+)
+
 from app.db.database import (
-    SessionLocal
+    AsyncSessionLocal
 )
 
 from app.db.models import (
@@ -19,183 +24,191 @@ logger = logging.getLogger(__name__)
 # =========================
 # Create Meeting
 # =========================
-def create_meeting(
-    source,
-    language,
-    title,
-    file_type=None
-):
+async def create_meeting(
 
-    db = SessionLocal()
+    source: str,
 
-    try:
+    language: str,
 
-        logger.info(
-            "Creating meeting record"
-        )
+    title: str,
 
-        meeting = Meeting(
+    file_type: str = None
+) -> int:
 
-            source=source,
+    async with AsyncSessionLocal() as db:
 
-            language=language,
+        try:
 
-            title=title,
+            logger.info(
+                "Creating meeting record"
+            )
 
-            file_type=file_type,
+            meeting = Meeting(
 
-            status="processing"
-        )
+                source=source,
 
-        db.add(meeting)
+                language=language,
 
-        db.commit()
+                title=title,
 
-        db.refresh(meeting)
+                file_type=file_type,
 
-        logger.info(
-            f"Meeting created: "
-            f"{meeting.id}"
-        )
+                status="processing"
+            )
 
-        return meeting.id
+            db.add(meeting)
 
-    except Exception as e:
+            await db.commit()
 
-        db.rollback()
+            await db.refresh(meeting)
 
-        logger.error(
-            f"Meeting creation failed: {e}"
-        )
+            logger.info(
+                f"Meeting created: "
+                f"{meeting.id}"
+            )
 
-        raise Exception(
-            f"DB Error: {e}"
-        )
+            return meeting.id
 
-    finally:
+        except Exception as e:
 
-        db.close()
+            await db.rollback()
+
+            logger.error(
+                f"Meeting creation failed: {e}"
+            )
+
+            raise Exception(
+                f"DB Error: {e}"
+            )
 
 
 # =========================
 # Update Meeting Files
 # =========================
-def update_meeting_files(
+async def update_meeting_files(
 
-    meeting_id,
+    meeting_id: int,
 
-    transcript_path,
+    transcript_path: str,
 
-    summary_path,
+    summary_path: str,
 
-    vector_store_path=None
+    vector_store_path: str = None
 ):
 
-    db = SessionLocal()
+    async with AsyncSessionLocal() as db:
 
-    try:
+        try:
 
-        logger.info(
-            f"Updating meeting files "
-            f"for {meeting_id}"
-        )
-
-        meeting = db.query(
-            Meeting
-        ).filter(
-            Meeting.id == meeting_id
-        ).first()
-
-        if not meeting:
-
-            raise Exception(
-                "Meeting not found"
+            logger.info(
+                f"Updating meeting "
+                f"{meeting_id}"
             )
 
-        meeting.transcript_path = (
-            transcript_path
-        )
+            result = await db.execute(
 
-        meeting.summary_path = (
-            summary_path
-        )
+                select(Meeting).where(
+                    Meeting.id == meeting_id
+                )
+            )
 
-        meeting.vector_store_path = (
-            vector_store_path
-        )
+            meeting = (
+                result.scalar_one_or_none()
+            )
 
-        meeting.status = "completed"
+            if not meeting:
 
-        db.commit()
+                raise Exception(
+                    "Meeting not found"
+                )
 
-        logger.info(
-            "Meeting files updated"
-        )
+            meeting.transcript_path = (
+                transcript_path
+            )
 
-    except Exception as e:
+            meeting.summary_path = (
+                summary_path
+            )
 
-        db.rollback()
+            meeting.vector_store_path = (
+                vector_store_path
+            )
 
-        logger.error(
-            f"Update failed: {e}"
-        )
+            meeting.status = "completed"
 
-        raise Exception(
-            f"DB Update Error: {e}"
-        )
+            await db.commit()
 
-    finally:
+            logger.info(
+                "Meeting updated successfully"
+            )
 
-        db.close()
+        except Exception as e:
+
+            await db.rollback()
+
+            logger.error(
+                f"Meeting update failed: {e}"
+            )
+
+            raise Exception(
+                f"DB Update Error: {e}"
+            )
 
 
 # =========================
 # Mark Meeting Failed
 # =========================
-def mark_meeting_failed(
-    meeting_id,
-    error_message
+async def mark_meeting_failed(
+
+    meeting_id: int,
+
+    error_message: str
 ):
 
-    db = SessionLocal()
+    async with AsyncSessionLocal() as db:
 
-    try:
+        try:
 
-        logger.info(
-            f"Marking meeting "
-            f"{meeting_id} failed"
-        )
+            logger.info(
+                f"Marking meeting "
+                f"{meeting_id} failed"
+            )
 
-        meeting = db.query(
-            Meeting
-        ).filter(
-            Meeting.id == meeting_id
-        ).first()
+            result = await db.execute(
 
-        if not meeting:
+                select(Meeting).where(
+                    Meeting.id == meeting_id
+                )
+            )
 
-            return
+            meeting = (
+                result.scalar_one_or_none()
+            )
 
-        meeting.status = "failed"
+            if not meeting:
 
-        meeting.error_message = (
-            str(error_message)
-        )
+                logger.warning(
+                    "Meeting not found"
+                )
 
-        db.commit()
+                return
 
-        logger.info(
-            "Meeting marked failed"
-        )
+            meeting.status = "failed"
 
-    except Exception as e:
+            meeting.error_message = (
+                str(error_message)
+            )
 
-        db.rollback()
+            await db.commit()
 
-        logger.error(
-            f"Failed status update failed: {e}"
-        )
+            logger.info(
+                "Meeting marked failed"
+            )
 
-    finally:
+        except Exception as e:
 
-        db.close()
+            await db.rollback()
+
+            logger.error(
+                f"Failed status update error: {e}"
+            )

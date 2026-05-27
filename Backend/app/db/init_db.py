@@ -1,11 +1,14 @@
 # app/db/init_db.py
+
 import logging
 
 from app.db.database import (
     engine
 )
 
-from app.db.models import Base
+from app.db.models import (
+    Base
+)
 
 
 # =========================
@@ -17,7 +20,7 @@ logger = logging.getLogger(__name__)
 # =========================
 # Initialize Database
 # =========================
-def init_db():
+async def init_db():
 
     try:
 
@@ -25,9 +28,11 @@ def init_db():
             "Creating database tables"
         )
 
-        Base.metadata.create_all(
-            bind=engine
-        )
+        async with engine.begin() as conn:
+
+            await conn.run_sync(
+                Base.metadata.create_all
+            )
 
         logger.info(
             "Database initialized successfully"
@@ -49,4 +54,8 @@ def init_db():
 # =========================
 if __name__ == "__main__":
 
-    init_db()
+    import asyncio
+
+    asyncio.run(
+        init_db()
+    )

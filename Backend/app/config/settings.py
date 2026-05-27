@@ -1,10 +1,28 @@
-#app/config/settings.py
+# app/config/settings.py
+
 import os
+import torch
 
 from dotenv import load_dotenv
 
 
+# =========================
+# Load Environment Variables
+# =========================
 load_dotenv()
+
+
+# =========================
+# Environment
+# =========================
+ENVIRONMENT = os.getenv(
+    "ENVIRONMENT",
+    "development"
+)
+
+DEBUG = (
+    ENVIRONMENT == "development"
+)
 
 
 # =========================
@@ -14,13 +32,26 @@ OPENAI_API_KEY = os.getenv(
     "OPENAI_API_KEY"
 )
 
-GPT_MODEL = "gpt-4o-mini"
+if not OPENAI_API_KEY:
+
+    raise ValueError(
+        "OPENAI_API_KEY is missing"
+    )
+
+
+GPT_MODEL = os.getenv(
+    "GPT_MODEL",
+    "gpt-4o-mini"
+)
 
 
 # =========================
 # Embedding Model
 # =========================
-EMBEDDING_MODEL = (
+EMBEDDING_MODEL = os.getenv(
+
+    "EMBEDDING_MODEL",
+
     "BAAI/bge-small-en-v1.5"
 )
 
@@ -28,116 +59,280 @@ EMBEDDING_MODEL = (
 # =========================
 # Vector Database
 # =========================
-CHROMA_DIR = "vector_db"
+CHROMA_DIR = os.getenv(
+    "CHROMA_DIR",
+    "vector_db"
+)
 
 
 # =========================
 # Storage Directories
 # =========================
-UPLOAD_DIR = "uploads"
+UPLOAD_DIR = os.getenv(
+    "UPLOAD_DIR",
+    "uploads"
+)
 
-TRANSCRIPT_DIR = "transcripts"
+TRANSCRIPTS_DIR = os.getenv(
+    "TRANSCRIPTS_DIR",
+    "transcripts"
+)
 
-SUMMARY_DIR = "summaries"
+SUMMARIES_DIR = os.getenv(
+    "SUMMARIES_DIR",
+    "summaries"
+)
 
-DOWNLOAD_DIR = "downloads"
+DOWNLOAD_DIR = os.getenv(
+    "DOWNLOAD_DIR",
+    "downloads"
+)
 
-# =========================
-# Storage Paths
-# =========================
-TRANSCRIPTS_DIR = "transcripts"
-
-SUMMARIES_DIR = "summaries"
-
-VECTOR_DB_DIR = "vector_db"
+CHUNK_DIR = os.getenv(
+    "CHUNK_DIR",
+    "chunks"
+)
 
 
 # =========================
 # File Upload Limits
 # =========================
-MAX_FILE_SIZE = (
-    60 * 1024 * 1024
+MAX_FILE_SIZE = int(
+    os.getenv(
+        "MAX_FILE_SIZE",
+        60 * 1024 * 1024
+    )
 )
-
-# =========================
-# Audio Processing
-# =========================
-CHUNK_DIR = "chunks"
-
-CHUNK_MINUTES = 10
-
-AUDIO_SAMPLE_RATE = 16000
-
-AUDIO_CHANNELS = 1
-
-YOUTUBE_AUDIO_QUALITY = "192"
 
 
 # =========================
 # Supported Upload Formats
 # =========================
 ALLOWED_EXTENSIONS = [
+
     ".mp3",
+
     ".wav",
+
     ".mp4",
+
     ".m4a"
 ]
 
-# =========================
-# Chunking Settings
-# =========================
-CHUNK_SIZE = 2500
-
-CHUNK_OVERLAP = 500
-
 
 # =========================
-# Retrieval Settings
+# Audio Processing
 # =========================
-RETRIEVAL_K = 10
+CHUNK_MINUTES = int(
+    os.getenv(
+        "CHUNK_MINUTES",
+        10
+    )
+)
 
-RETRIEVAL_FETCH_K = 40
+AUDIO_SAMPLE_RATE = int(
+    os.getenv(
+        "AUDIO_SAMPLE_RATE",
+        16000
+    )
+)
 
-# =========================
-# Summarization
-# =========================
-SUMMARY_CHUNK_SIZE = 3000
+AUDIO_CHANNELS = int(
+    os.getenv(
+        "AUDIO_CHANNELS",
+        1
+    )
+)
 
-SUMMARY_CHUNK_OVERLAP = 300
+YOUTUBE_AUDIO_QUALITY = os.getenv(
+    "YOUTUBE_AUDIO_QUALITY",
+    "192"
+)
+
 
 # =========================
 # Whisper Settings
 # =========================
-WHISPER_MODEL = "small"
+WHISPER_MODEL = os.getenv(
+    "WHISPER_MODEL",
+    "small"
+)
 
-WHISPER_DEVICE = "cpu"
+WHISPER_DEVICE = (
 
-WHISPER_COMPUTE_TYPE = "int8"
+    "cuda"
 
-WHISPER_BEAM_SIZE = 1
+    if torch.cuda.is_available()
 
-WHISPER_VAD_FILTER = True
+    else "cpu"
+)
+
+WHISPER_COMPUTE_TYPE = os.getenv(
+
+    "WHISPER_COMPUTE_TYPE",
+
+    "float16"
+    if WHISPER_DEVICE == "cuda"
+    else "int8"
+)
+
+WHISPER_BEAM_SIZE = int(
+    os.getenv(
+        "WHISPER_BEAM_SIZE",
+        1
+    )
+)
+
+WHISPER_VAD_FILTER = (
+    os.getenv(
+        "WHISPER_VAD_FILTER",
+        "true"
+    ).lower() == "true"
+)
+
 
 # =========================
-# Database
+# Text Chunking
 # =========================
-DATABASE_URL = os.getenv("DATABASE_URL")
+CHUNK_SIZE = int(
+    os.getenv(
+        "CHUNK_SIZE",
+        2500
+    )
+)
 
-DB_POOL_SIZE = 5
+CHUNK_OVERLAP = int(
+    os.getenv(
+        "CHUNK_OVERLAP",
+        500
+    )
+)
 
-DB_MAX_OVERFLOW = 10
 
-DB_POOL_RECYCLE = 300
+# =========================
+# Summarization
+# =========================
+SUMMARY_CHUNK_SIZE = int(
+    os.getenv(
+        "SUMMARY_CHUNK_SIZE",
+        3000
+    )
+)
 
-DB_POOL_PRE_PING = True
+SUMMARY_CHUNK_OVERLAP = int(
+    os.getenv(
+        "SUMMARY_CHUNK_OVERLAP",
+        300
+    )
+)
 
-DB_ECHO = False
 
 # =========================
 # Retrieval Settings
 # =========================
-RETRIEVAL_K = 10
+RETRIEVAL_K = int(
+    os.getenv(
+        "RETRIEVAL_K",
+        10
+    )
+)
 
-RETRIEVAL_FETCH_K = 40
+RETRIEVAL_FETCH_K = int(
+    os.getenv(
+        "RETRIEVAL_FETCH_K",
+        40
+    )
+)
 
-RETRIEVAL_SEARCH_TYPE = "mmr"
+RETRIEVAL_SEARCH_TYPE = os.getenv(
+    "RETRIEVAL_SEARCH_TYPE",
+    "mmr"
+)
+
+
+# =========================
+# Database
+# =========================
+DATABASE_URL = os.getenv(
+    "DATABASE_URL"
+)
+
+if not DATABASE_URL:
+
+    raise ValueError(
+        "DATABASE_URL is missing"
+    )
+
+
+# =========================
+# Async DB Pool
+# =========================
+DB_POOL_SIZE = int(
+    os.getenv(
+        "DB_POOL_SIZE",
+        5
+    )
+)
+
+DB_MAX_OVERFLOW = int(
+    os.getenv(
+        "DB_MAX_OVERFLOW",
+        10
+    )
+)
+
+DB_POOL_RECYCLE = int(
+    os.getenv(
+        "DB_POOL_RECYCLE",
+        300
+    )
+)
+
+DB_POOL_PRE_PING = (
+    os.getenv(
+        "DB_POOL_PRE_PING",
+        "true"
+    ).lower() == "true"
+)
+
+DB_ECHO = (
+    os.getenv(
+        "DB_ECHO",
+        "false"
+    ).lower() == "true"
+)
+
+
+# =========================
+# OpenAI Timeouts
+# =========================
+OPENAI_REQUEST_TIMEOUT = int(
+    os.getenv(
+        "OPENAI_REQUEST_TIMEOUT",
+        120
+    )
+)
+
+
+# =========================
+# Ensure Directories Exist
+# =========================
+for directory in [
+
+    UPLOAD_DIR,
+
+    TRANSCRIPTS_DIR,
+
+    SUMMARIES_DIR,
+
+    DOWNLOAD_DIR,
+
+    CHUNK_DIR,
+
+    CHROMA_DIR
+]:
+
+    os.makedirs(
+        directory,
+        exist_ok=True
+    )

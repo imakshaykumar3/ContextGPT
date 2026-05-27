@@ -1,9 +1,12 @@
 # app/core/extractor.py
+
 import logging
 
 from dotenv import load_dotenv
 
-from langchain_openai import ChatOpenAI
+from langchain_openai import (
+    ChatOpenAI
+)
 
 from langchain_core.prompts import (
     ChatPromptTemplate
@@ -14,16 +17,23 @@ from langchain_core.output_parsers import (
 )
 
 from langchain_core.runnables import (
+
     RunnablePassthrough,
+
     RunnableLambda
 )
 
 from app.config.settings import (
+
     GPT_MODEL,
+
     OPENAI_API_KEY
 )
 
 
+# =========================
+# Load Environment
+# =========================
 load_dotenv()
 
 
@@ -37,12 +47,18 @@ logger = logging.getLogger(__name__)
 # Shared LLM Instance
 # =========================
 llm_model = ChatOpenAI(
+
     model=GPT_MODEL,
+
     openai_api_key=OPENAI_API_KEY,
+
     temperature=0.2
 )
 
 
+# =========================
+# Get Shared LLM
+# =========================
 def get_llm():
 
     return llm_model
@@ -61,30 +77,44 @@ question_parser = JsonOutputParser()
 # =========================
 # Build Extraction Chain
 # =========================
-def build_chain(system_prompt: str, parser):
+def build_chain(
 
-    logger.info("Building extraction chain")
+    system_prompt: str,
+
+    parser
+):
+
+    logger.info(
+        "Building extraction chain"
+    )
 
     llm = get_llm()
 
     chat_prompt = (
         ChatPromptTemplate.from_messages([
+
             (
                 "system",
+
                 system_prompt
             ),
+
             (
                 "human",
+
                 "{text}"
             ),
         ])
     )
 
     chain = (
+
         RunnablePassthrough()
 
         | RunnableLambda(
-            lambda x: {"text": x}
+            lambda x: {
+                "text": x
+            }
         )
 
         | chat_prompt
@@ -100,134 +130,191 @@ def build_chain(system_prompt: str, parser):
 # =========================
 # Extract Action Items
 # =========================
-def extract_action_items(transcript: str):
+async def extract_action_items(
+    transcript: str
+):
 
-    logger.info("Extracting action items")
+    try:
 
-    chain = build_chain(
-        """
-        You are an expert meeting analyst.
+        logger.info(
+            "Extracting action items"
+        )
 
-        Extract ALL explicit action items
-        from the meeting transcript.
+        chain = build_chain(
+            """
+            You are an expert meeting analyst.
 
-        Return ONLY valid JSON.
+            Extract ALL explicit action items
+            from the meeting transcript.
 
-        JSON format:
+            Return ONLY valid JSON.
 
-        [
-          {
-            "task": "...",
-            "owner": "...",
-            "due_date": "...",
-            "priority": "High"
-          }
-        ]
+            JSON format:
 
-        Rules:
-        - No markdown
-        - No explanations
-        - No extra text
-        - If owner missing:
-          "Not specified"
-        - If due date missing:
-          "Not specified"
-        - Infer priority carefully
-        - Priority must be:
-          High / Medium / Low
-        - Return empty list [] if none found
-        """,
-        action_parser
-    )
+            [
+              {
+                "task": "...",
+                "owner": "...",
+                "due_date": "...",
+                "priority": "High"
+              }
+            ]
 
-    result = chain.invoke(transcript)
+            Rules:
+            - No markdown
+            - No explanations
+            - No extra text
+            - If owner missing:
+              "Not specified"
+            - If due date missing:
+              "Not specified"
+            - Infer priority carefully
+            - Priority must be:
+              High / Medium / Low
+            - Return empty list [] if none found
+            """,
 
-    logger.info("Action items extracted")
+            action_parser
+        )
 
-    return result
+        result = await chain.ainvoke(
+            transcript
+        )
+
+        logger.info(
+            "Action items extracted"
+        )
+
+        return result
+
+    except Exception as e:
+
+        logger.error(
+            f"Action extraction failed: {e}"
+        )
+
+        return []
 
 
 # =========================
 # Extract Key Decisions
 # =========================
-def extract_key_decisions(transcript: str):
+async def extract_key_decisions(
+    transcript: str
+):
 
-    logger.info("Extracting key decisions")
+    try:
 
-    chain = build_chain(
-        """
-        You are an expert meeting analyst.
+        logger.info(
+            "Extracting key decisions"
+        )
 
-        Extract all IMPORTANT confirmed
-        decisions from the meeting transcript.
+        chain = build_chain(
+            """
+            You are an expert meeting analyst.
 
-        Return ONLY valid JSON.
+            Extract all IMPORTANT confirmed
+            decisions from the meeting transcript.
 
-        JSON format:
+            Return ONLY valid JSON.
 
-        [
-          {
-            "decision": "..."
-          }
-        ]
+            JSON format:
 
-        Rules:
-        - No markdown
-        - No explanations
-        - No extra text
-        - Do NOT hallucinate
-        - Only include confirmed decisions
-        - Return empty list [] if none found
-        """,
-        decision_parser
-    )
+            [
+              {
+                "decision": "..."
+              }
+            ]
 
-    result = chain.invoke(transcript)
+            Rules:
+            - No markdown
+            - No explanations
+            - No extra text
+            - Do NOT hallucinate
+            - Only include confirmed decisions
+            - Return empty list [] if none found
+            """,
 
-    logger.info("Key decisions extracted")
+            decision_parser
+        )
 
-    return result
+        result = await chain.ainvoke(
+            transcript
+        )
+
+        logger.info(
+            "Key decisions extracted"
+        )
+
+        return result
+
+    except Exception as e:
+
+        logger.error(
+            f"Decision extraction failed: {e}"
+        )
+
+        return []
 
 
 # =========================
 # Extract Open Questions
 # =========================
-def extract_questions(transcript: str):
+async def extract_questions(
+    transcript: str
+):
 
-    logger.info("Extracting open questions")
+    try:
 
-    chain = build_chain(
-        """
-        You are an expert meeting analyst.
+        logger.info(
+            "Extracting open questions"
+        )
 
-        Extract unresolved questions,
-        blockers, follow-ups,
-        or pending discussions.
+        chain = build_chain(
+            """
+            You are an expert meeting analyst.
 
-        Return ONLY valid JSON.
+            Extract unresolved questions,
+            blockers, follow-ups,
+            or pending discussions.
 
-        JSON format:
+            Return ONLY valid JSON.
 
-        [
-          {
-            "question": "..."
-          }
-        ]
+            JSON format:
 
-        Rules:
-        - No markdown
-        - No explanations
-        - No extra text
-        - Be literal
-        - Do NOT infer
-        - Only unresolved items
-        - Return empty list [] if none found
-        """,
-        question_parser
-    )
+            [
+              {
+                "question": "..."
+              }
+            ]
 
-    result = chain.invoke(transcript)
+            Rules:
+            - No markdown
+            - No explanations
+            - No extra text
+            - Be literal
+            - Do NOT infer
+            - Only unresolved items
+            - Return empty list [] if none found
+            """,
 
-    logger.info("Open questions extracted")
+            question_parser
+        )
 
-    return result
+        result = await chain.ainvoke(
+            transcript
+        )
+
+        logger.info(
+            "Open questions extracted"
+        )
+
+        return result
+
+    except Exception as e:
+
+        logger.error(
+            f"Question extraction failed: {e}"
+        )
+
+        return []

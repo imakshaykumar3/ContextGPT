@@ -1,5 +1,7 @@
 # app/rag/rag_engine.py
+
 import logging
+import asyncio
 
 from langchain_openai import (
     ChatOpenAI
@@ -21,7 +23,6 @@ from app.config.settings import (
 )
 
 from app.rag.vector_store import (
-    build_vector_store,
     load_vector_store
 )
 
@@ -38,9 +39,15 @@ from app.rag.prompts import (
 )
 
 
+# =========================
+# Logger
+# =========================
 logger = logging.getLogger(__name__)
 
 
+# =========================
+# Shared LLM
+# =========================
 llm = ChatOpenAI(
 
     model=GPT_MODEL,
@@ -52,47 +59,194 @@ llm = ChatOpenAI(
 
 
 # =========================
+# Shared Prompt
+# =========================
+qa_prompt = (
+    ChatPromptTemplate.from_messages([
+
+        (
+            "system",
+
+            RAG_QA_PROMPT
+        ),
+
+        (
+            "human",
+
+            "{question}"
+        )
+    ])
+)
+
+
+# =========================
+# Shared QA Chain
+# =========================
+qa_chain = (
+
+    qa_prompt
+
+    | llm
+
+    | StrOutputParser()
+)
+
+
+# =========================
 # Ask Question
 # =========================
-def ask_question(
+async def ask_question(
+
     meeting_id: int,
+
     question: str
 ):
 
-    logger.info(
-        f"Question received: {question}"
-    )
+    try:
 
-    # Load vector DB
-    vector_store = load_vector_store(
-        meeting_id
-    )
+        logger.info(
+            f"Question received: "
+            f"{question}"
+        )
 
-    # Create retriever
-    retriever = get_retriever(
-        vector_store
-    )
+        # -------------------------
+        # Load Vector Store
+        # CPU/IO Bound
+        # -------------------------
+        vector_store = (
+            await asyncio.to_thread(
 
-    # Rewrite query
-    rewritten_query = rewrite_query(
-        question
-    )
+                load_vector_store,
 
-    logger.info(
-        f"Rewritten query: "
-        f"{rewritten_query}"
-    )
+                meeting_id
+            )
+        )
 
-    # Retrieve documents
-    docs = retriever.invoke(
-        rewritten_query
-    )
+        # -------------------------
+        # Create Retriever
+        # -------------------------
+        retriever = get_retriever(
+            vector_store
+        )
 
-    logger.info(
-        f"Retrieved {len(docs)} docs"
-    )
+        # -------------------------
+        # Rewrite Query
+        # -------------------------
+        rewritten_query = (
+            await rewrite_query(
+                question
+            )
+        )
 
-    if not docs:
+        logger.info(
+            f"Rewritten query: "
+            f"{rewritten_query}"
+        )
+
+        # -------------------------
+        # Retrieve Documents
+        # -------------------------
+        docs = await retriever.ainvoke(
+            rewritten_query
+        )
+
+        # -------------------------
+        # Metadata Filtering
+        # IMPORTANT
+        # -------------------------
+        docs = [
+
+            doc
+
+            for doc in docs
+
+            if doc.metadata.get(
+                "meeting_id"
+            ) == meeting_id
+        ]
+
+        logger.info(
+            f"Retrieved {len(docs)} docs"
+        )
+
+        # -------------------------
+        # No Context Found
+        # -------------------------
+        if not docs:
+
+            return {
+
+                "rewritten_query":
+                    rewritten_query,
+
+                "answer":
+                    (
+                        "I could not find "
+                        "relevant information "
+                        "in the meeting."
+                    )
+            }
+
+        # -------------------------
+        # Limit Context Size
+        # Prevent token explosion
+        # -------------------------
+        MAX_CONTEXT_CHARS = 12000
+
+        context_parts = []
+
+        total_chars = 0
+
+        for doc in docs:
+
+            content = (
+                doc.page_content.strip()
+            )
+
+            if not content:
+                continue
+
+            if (
+                total_chars
+                + len(content)
+                > MAX_CONTEXT_CHARS
+            ):
+                break
+
+            context_parts.append(
+                content
+            )
+
+            total_chars += len(
+                content
+            )
+
+        context = "\n\n".join(
+            context_parts
+        )
+
+        logger.info(
+            f"Context size: "
+            f"{len(context)} chars"
+        )
+
+        # -------------------------
+        # Generate Answer
+        # -------------------------
+        response = (
+            await qa_chain.ainvoke({
+
+                "context":
+                    context,
+
+                "question":
+                    question
+            })
+        )
+
+        logger.info(
+            "Answer generated successfully"
+        )
 
         return {
 
@@ -100,56 +254,23 @@ def ask_question(
                 rewritten_query,
 
             "answer":
-                "I could not find "
-                "relevant information "
-                "in the meeting."
+                response.strip()
         }
 
-    # Build context
-    context = "\n\n".join([
+    except Exception as e:
 
-        doc.page_content
+        logger.error(
+            f"RAG QA failed: {e}"
+        )
 
-        for doc in docs
-    ])
+        return {
 
-    # Prompt
-    prompt = (
-        ChatPromptTemplate.from_messages([
-            (
-                "system",
-                RAG_QA_PROMPT
-            ),
-            (
-                "human",
-                "{question}"
-            )
-        ])
-    )
+            "rewritten_query":
+                question,
 
-    # QA chain
-    chain = (
-        prompt
-        | llm
-        | StrOutputParser()
-    )
-
-    response = chain.invoke({
-
-        "context": context,
-
-        "question": question
-    })
-
-    logger.info(
-        "Answer generated"
-    )
-
-    return {
-
-        "rewritten_query":
-            rewritten_query,
-
-        "answer":
-            response
-    }
+            "answer":
+                (
+                    "An error occurred while "
+                    "processing your question."
+                )
+        }

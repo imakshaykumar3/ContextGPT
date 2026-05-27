@@ -1,21 +1,33 @@
 # app/db/database.py
+
 import logging
 
-from sqlalchemy import (
-    create_engine
+from sqlalchemy.ext.asyncio import (
+
+    create_async_engine,
+
+    AsyncSession
 )
 
 from sqlalchemy.orm import (
+
     sessionmaker,
+
     declarative_base
 )
 
 from app.config.settings import (
+
     DATABASE_URL,
+
     DB_POOL_SIZE,
+
     DB_MAX_OVERFLOW,
+
     DB_POOL_RECYCLE,
+
     DB_POOL_PRE_PING,
+
     DB_ECHO
 )
 
@@ -27,11 +39,13 @@ logger = logging.getLogger(__name__)
 
 
 # =========================
-# Database Engine
+# Async Database Engine
 # =========================
-logger.info("Initializing database engine")
+logger.info(
+    "Initializing async database engine"
+)
 
-engine = create_engine(
+engine = create_async_engine(
 
     DATABASE_URL,
 
@@ -50,15 +64,19 @@ engine = create_engine(
 
 
 # =========================
-# Session Factory
+# Async Session Factory
 # =========================
-SessionLocal = sessionmaker(
+AsyncSessionLocal = sessionmaker(
 
-    autocommit=False,
+    bind=engine,
+
+    class_=AsyncSession,
 
     autoflush=False,
 
-    bind=engine
+    autocommit=False,
+
+    expire_on_commit=False
 )
 
 
@@ -71,14 +89,14 @@ Base = declarative_base()
 # =========================
 # Dependency Injection
 # =========================
-def get_db():
+async def get_db():
 
-    db = SessionLocal()
+    async with AsyncSessionLocal() as db:
 
-    try:
+        try:
 
-        yield db
+            yield db
 
-    finally:
+        finally:
 
-        db.close()
+            await db.close()

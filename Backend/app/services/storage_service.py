@@ -1,10 +1,14 @@
 # app/services/storage_service.py
+
 import os
 import json
 import logging
+import aiofiles
 
 from app.config.settings import (
+
     TRANSCRIPTS_DIR,
+
     SUMMARIES_DIR
 )
 
@@ -19,12 +23,16 @@ logger = logging.getLogger(__name__)
 # Ensure Directories Exist
 # =========================
 os.makedirs(
+
     TRANSCRIPTS_DIR,
+
     exist_ok=True
 )
 
 os.makedirs(
+
     SUMMARIES_DIR,
+
     exist_ok=True
 )
 
@@ -32,10 +40,12 @@ os.makedirs(
 # =========================
 # Save Transcript
 # =========================
-def save_transcript(
-    meeting_id,
-    transcript
-):
+async def save_transcript(
+
+    meeting_id: int,
+
+    transcript: str
+) -> str:
 
     try:
 
@@ -51,13 +61,18 @@ def save_transcript(
             f"meeting_{meeting_id}.txt"
         )
 
-        with open(
+        async with aiofiles.open(
+
             transcript_path,
+
             "w",
+
             encoding="utf-8"
         ) as f:
 
-            f.write(transcript)
+            await f.write(
+                transcript
+            )
 
         logger.info(
             "Transcript saved successfully"
@@ -79,10 +94,12 @@ def save_transcript(
 # =========================
 # Save Summary JSON
 # =========================
-def save_summary(
-    meeting_id,
-    data
-):
+async def save_summary(
+
+    meeting_id: int,
+
+    data: dict
+) -> str:
 
     try:
 
@@ -98,21 +115,25 @@ def save_summary(
             f"meeting_{meeting_id}.json"
         )
 
-        with open(
+        async with aiofiles.open(
+
             summary_path,
+
             "w",
+
             encoding="utf-8"
         ) as f:
 
-            json.dump(
+            await f.write(
 
-                data,
+                json.dumps(
 
-                f,
+                    data,
 
-                indent=4,
+                    indent=4,
 
-                ensure_ascii=False
+                    ensure_ascii=False
+                )
             )
 
         logger.info(
@@ -135,19 +156,32 @@ def save_summary(
 # =========================
 # Load Transcript
 # =========================
-def load_transcript(
-    transcript_path
-):
+async def load_transcript(
+    transcript_path: str
+) -> str:
 
     try:
 
-        with open(
+        if not os.path.exists(
+            transcript_path
+        ):
+
+            raise FileNotFoundError(
+                "Transcript file not found"
+            )
+
+        async with aiofiles.open(
+
             transcript_path,
+
             "r",
+
             encoding="utf-8"
         ) as f:
 
-            return f.read()
+            transcript = await f.read()
+
+        return transcript
 
     except Exception as e:
 
@@ -163,19 +197,34 @@ def load_transcript(
 # =========================
 # Load Summary
 # =========================
-def load_summary(
-    summary_path
-):
+async def load_summary(
+    summary_path: str
+) -> dict:
 
     try:
 
-        with open(
+        if not os.path.exists(
+            summary_path
+        ):
+
+            raise FileNotFoundError(
+                "Summary file not found"
+            )
+
+        async with aiofiles.open(
+
             summary_path,
+
             "r",
+
             encoding="utf-8"
         ) as f:
 
-            return json.load(f)
+            content = await f.read()
+
+        return json.loads(
+            content
+        )
 
     except Exception as e:
 
