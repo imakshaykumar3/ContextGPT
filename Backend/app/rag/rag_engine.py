@@ -38,6 +38,10 @@ from app.rag.prompts import (
     RAG_QA_PROMPT
 )
 
+from app.rag.reranker import (
+    rerank_documents
+)
+
 
 # =========================
 # Logger
@@ -149,6 +153,20 @@ async def ask_question(
         docs = await retriever.ainvoke(
             rewritten_query
         )
+
+        # -------------------------
+        # Rerank Documents
+        # -------------------------
+        # docs = await asyncio.to_thread(
+
+        #     rerank_documents,
+
+        #     question,
+
+        #     docs,
+
+        #     5
+        # )
 
         logger.info(
             f"Retrieved {len(docs)} docs"

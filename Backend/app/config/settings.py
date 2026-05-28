@@ -233,7 +233,7 @@ SUMMARY_CHUNK_OVERLAP = int(
 RETRIEVAL_K = int(
     os.getenv(
         "RETRIEVAL_K",
-        10
+        20
     )
 )
 
