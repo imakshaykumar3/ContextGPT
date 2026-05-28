@@ -152,12 +152,12 @@ async def extract_action_items(
             JSON format:
 
             [
-              {
+              {{
                 "task": "...",
                 "owner": "...",
                 "due_date": "...",
                 "priority": "High"
-              }
+              }}
             ]
 
             Rules:
@@ -221,9 +221,9 @@ async def extract_key_decisions(
             JSON format:
 
             [
-              {
+              {{
                 "decision": "..."
-              }
+              }}
             ]
 
             Rules:
@@ -283,9 +283,9 @@ async def extract_questions(
             JSON format:
 
             [
-              {
+              {{
                 "question": "..."
-              }
+              }}
             ]
 
             Rules:

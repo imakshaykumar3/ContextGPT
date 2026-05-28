@@ -150,21 +150,6 @@ async def ask_question(
             rewritten_query
         )
 
-        # -------------------------
-        # Metadata Filtering
-        # IMPORTANT
-        # -------------------------
-        docs = [
-
-            doc
-
-            for doc in docs
-
-            if doc.metadata.get(
-                "meeting_id"
-            ) == meeting_id
-        ]
-
         logger.info(
             f"Retrieved {len(docs)} docs"
         )

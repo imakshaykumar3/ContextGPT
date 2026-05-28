@@ -3,9 +3,7 @@
 import os
 import logging
 
-from langchain_chroma import (
-    Chroma
-)
+from langchain_chroma import Chroma
 
 from langchain_text_splitters import (
     RecursiveCharacterTextSplitter
@@ -36,9 +34,25 @@ logger = logging.getLogger(__name__)
 
 
 # =========================
-# Shared Collection Name
+# Get Meeting Paths
 # =========================
-COLLECTION_NAME = "meetings"
+def get_meeting_vector_path(
+    meeting_id: int
+) -> str:
+
+    return os.path.join(
+
+        CHROMA_DIR,
+
+        f"meeting_{meeting_id}"
+    )
+
+
+def get_collection_name(
+    meeting_id: int
+) -> str:
+
+    return f"meeting_{meeting_id}"
 
 
 # =========================
@@ -79,7 +93,7 @@ def build_vector_store(
         )
 
         # -------------------------
-        # Build Documents
+        # Create Documents
         # -------------------------
         docs = [
 
@@ -97,19 +111,23 @@ def build_vector_store(
                 }
             )
 
-            for idx, chunk in enumerate(
-                chunks
-            )
+            for idx, chunk in enumerate(chunks)
 
             if chunk.strip()
         ]
 
         # -------------------------
-        # Ensure Chroma Directory
+        # Meeting-specific path
         # -------------------------
+        persist_directory = (
+            get_meeting_vector_path(
+                meeting_id
+            )
+        )
+
         os.makedirs(
 
-            CHROMA_DIR,
+            persist_directory,
 
             exist_ok=True
         )
@@ -123,10 +141,14 @@ def build_vector_store(
 
             embedding=get_embeddings(),
 
-            persist_directory=CHROMA_DIR,
+            persist_directory=(
+                persist_directory
+            ),
 
             collection_name=(
-                COLLECTION_NAME
+                get_collection_name(
+                    meeting_id
+                )
             )
         )
 
@@ -161,24 +183,34 @@ def load_vector_store(
             f"for meeting {meeting_id}"
         )
 
+        persist_directory = (
+            get_meeting_vector_path(
+                meeting_id
+            )
+        )
+
         if not os.path.exists(
-            CHROMA_DIR
+            persist_directory
         ):
 
             raise Exception(
-                "Vector database missing"
+                "Meeting vector DB missing"
             )
 
         vector_store = Chroma(
 
-            persist_directory=CHROMA_DIR,
+            persist_directory=(
+                persist_directory
+            ),
 
             embedding_function=(
                 get_embeddings()
             ),
 
             collection_name=(
-                COLLECTION_NAME
+                get_collection_name(
+                    meeting_id
+                )
             )
         )
 

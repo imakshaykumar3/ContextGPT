@@ -342,9 +342,11 @@ def cleanup_files(
 # =========================
 def process_input(
     source: str
-) -> list[str]:
+) -> dict:
 
     wav_path = None
+
+    downloaded_file = None
 
     try:
 
@@ -364,6 +366,8 @@ def process_input(
                     source
                 )
             )
+
+            downloaded_file = wav_path
 
         # -------------------------
         # Local File
@@ -389,12 +393,34 @@ def process_input(
             "Audio processing completed successfully"
         )
 
-        return chunks
+        return {
+
+            "chunks":
+                chunks,
+
+            "wav_path":
+                wav_path,
+
+            "downloaded_file":
+                downloaded_file
+        }
 
     except Exception as e:
 
         logger.error(
             f"Audio processing failed: {e}"
+        )
+
+        # Cleanup on failure
+        cleanup_targets = []
+
+        if wav_path:
+            cleanup_targets.append(
+                wav_path
+            )
+
+        cleanup_files(
+            cleanup_targets
         )
 
         raise Exception(

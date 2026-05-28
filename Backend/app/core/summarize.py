@@ -214,7 +214,7 @@ async def summarize(
 
                 JSON format:
 
-                {
+                {{
                   "overview": "...",
 
                   "discussion_points": [
@@ -233,7 +233,7 @@ async def summarize(
                   ],
 
                   "conclusion": "..."
-                }
+                }}
 
                 Rules:
                 - No markdown

@@ -5,7 +5,10 @@ import logging
 import asyncio
 
 from app.utils.audio_processor import (
-    process_input
+
+    process_input,
+
+    cleanup_files
 )
 
 from app.core.transcriber import (
@@ -56,6 +59,9 @@ logger = logging.getLogger(__name__)
 # =========================
 # Main AI Pipeline
 # =========================
+# =========================
+# Main AI Pipeline
+# =========================
 async def run_pipeline(
 
     source: str,
@@ -64,6 +70,10 @@ async def run_pipeline(
 ):
 
     meeting_id = None
+
+    chunks = []
+
+    wav_path = None
 
     try:
 
@@ -75,11 +85,21 @@ async def run_pipeline(
         # Process Audio
         # CPU-bound
         # -------------------------
-        chunks = await asyncio.to_thread(
+        processing_result = (
+            await asyncio.to_thread(
 
-            process_input,
+                process_input,
 
-            source
+                source
+            )
+        )
+
+        chunks = (
+            processing_result["chunks"]
+        )
+
+        wav_path = (
+            processing_result["wav_path"]
         )
 
         logger.info(
@@ -115,7 +135,6 @@ async def run_pipeline(
 
         # -------------------------
         # Generate Title
-        # LLM async
         # -------------------------
         title = await generate_title(
             transcript
@@ -228,7 +247,6 @@ async def run_pipeline(
 
         # -------------------------
         # Build Vector Store
-        # CPU-bound embeddings
         # -------------------------
         await asyncio.to_thread(
 
@@ -251,8 +269,10 @@ async def run_pipeline(
             summary_path,
 
             vector_store_path=(
-
-                f"vector_db/meeting_{meeting_id}"
+                os.path.join(
+                    "vector_db",
+                    f"meeting_{meeting_id}"
+                )
             )
         )
 
@@ -302,3 +322,50 @@ async def run_pipeline(
         raise Exception(
             f"Pipeline Error: {e}"
         )
+
+    finally:
+
+        try:
+
+            cleanup_targets = []
+
+            # -------------------------
+            # Cleanup chunks
+            # -------------------------
+            if chunks:
+
+                cleanup_targets.extend(
+                    chunks
+                )
+
+            # -------------------------
+            # Cleanup temp WAV
+            # -------------------------
+            if (
+                wav_path
+                and os.path.exists(
+                    wav_path
+                )
+            ):
+
+                cleanup_targets.append(
+                    wav_path
+                )
+
+            # -------------------------
+            # Remove temp files
+            # -------------------------
+            cleanup_files(
+                cleanup_targets
+            )
+
+            logger.info(
+                "Temporary files cleaned successfully"
+            )
+
+        except Exception as cleanup_error:
+
+            logger.warning(
+                f"Cleanup failed: "
+                f"{cleanup_error}"
+            )
