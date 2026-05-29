@@ -5,9 +5,7 @@ import logging
 import asyncio
 
 from app.utils.audio_processor import (
-
     process_input,
-
     cleanup_files
 )
 
@@ -16,17 +14,11 @@ from app.core.transcriber import (
 )
 
 from app.core.summarize import (
-    summarize,
     generate_title
 )
 
-from app.core.extractor import (
-
-    extract_action_items,
-
-    extract_key_decisions,
-
-    extract_questions
+from app.core.meeting_analyzer import (
+    analyze_meeting
 )
 
 from app.rag.vector_store import (
@@ -34,18 +26,13 @@ from app.rag.vector_store import (
 )
 
 from app.services.storage_service import (
-
     save_transcript,
-
     save_summary
 )
 
 from app.services.db_service import (
-
     create_meeting,
-
     update_meeting_files,
-
     mark_meeting_failed
 )
 
@@ -59,13 +46,8 @@ logger = logging.getLogger(__name__)
 # =========================
 # Main AI Pipeline
 # =========================
-# =========================
-# Main AI Pipeline
-# =========================
 async def run_pipeline(
-
     source: str,
-
     language: str = "en"
 ):
 
@@ -87,9 +69,7 @@ async def run_pipeline(
         # -------------------------
         processing_result = (
             await asyncio.to_thread(
-
                 process_input,
-
                 source
             )
         )
@@ -112,11 +92,8 @@ async def run_pipeline(
         # -------------------------
         transcription_result = (
             await asyncio.to_thread(
-
                 transcribe_all,
-
                 chunks,
-
                 language
             )
         )
@@ -144,63 +121,46 @@ async def run_pipeline(
         # Create DB Record
         # -------------------------
         meeting_id = await create_meeting(
-
             source=source,
-
             language=detected_language,
-
             title=title,
-
-            file_type=os.path.splitext(
-                source
-            )[1]
-            if os.path.isfile(source)
-            else "youtube"
+            file_type=(
+                os.path.splitext(source)[1]
+                if os.path.isfile(source)
+                else "youtube"
+            )
         )
 
         # -------------------------
-        # Parallel AI Tasks
+        # Unified Meeting Analysis
+        # Single GPT Call
         # -------------------------
-        summary_task = summarize(
+        analysis = await analyze_meeting(
             transcript
         )
 
-        action_items_task = (
-            extract_action_items(
-                transcript
-            )
+        summary = analysis.get(
+            "summary",
+            {}
         )
 
-        key_decisions_task = (
-            extract_key_decisions(
-                transcript
-            )
+        action_items = analysis.get(
+            "action_items",
+            []
         )
 
-        open_questions_task = (
-            extract_questions(
-                transcript
-            )
+        key_decisions = analysis.get(
+            "key_decisions",
+            []
         )
 
-        (
-            summary,
+        open_questions = analysis.get(
+            "open_questions",
+            []
+        )
 
-            action_items,
-
-            key_decisions,
-
-            open_questions
-
-        ) = await asyncio.gather(
-
-            summary_task,
-
-            action_items_task,
-
-            key_decisions_task,
-
-            open_questions_task
+        logger.info(
+            "Meeting analysis completed"
         )
 
         # -------------------------
@@ -208,9 +168,7 @@ async def run_pipeline(
         # -------------------------
         transcript_path = (
             await save_transcript(
-
                 meeting_id,
-
                 transcript
             )
         )
@@ -238,9 +196,7 @@ async def run_pipeline(
 
         summary_path = (
             await save_summary(
-
                 meeting_id,
-
                 summary_data
             )
         )
@@ -249,11 +205,8 @@ async def run_pipeline(
         # Build Vector Store
         # -------------------------
         await asyncio.to_thread(
-
             build_vector_store,
-
             meeting_id,
-
             transcript
         )
 
@@ -261,13 +214,9 @@ async def run_pipeline(
         # Update DB
         # -------------------------
         await update_meeting_files(
-
             meeting_id,
-
             transcript_path,
-
             summary_path,
-
             vector_store_path=(
                 os.path.join(
                     "vector_db",
@@ -313,9 +262,7 @@ async def run_pipeline(
         if meeting_id:
 
             await mark_meeting_failed(
-
                 meeting_id,
-
                 str(e)
             )
 
