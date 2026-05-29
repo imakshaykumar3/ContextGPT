@@ -26,6 +26,8 @@ logger = logging.getLogger(__name__)
 # =========================
 async def create_meeting(
 
+    user_id: int,
+
     source: str,
 
     language: str,
@@ -44,6 +46,8 @@ async def create_meeting(
             )
 
             meeting = Meeting(
+
+                user_id=user_id,
 
                 source=source,
 

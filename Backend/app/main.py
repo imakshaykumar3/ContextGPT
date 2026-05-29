@@ -1,35 +1,20 @@
-# app/main.py
-
 import logging
 
-from contextlib import (
-    asynccontextmanager
-)
+from contextlib import asynccontextmanager
 
-from fastapi import (
-    FastAPI
-)
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
-from fastapi.middleware.cors import (
-    CORSMiddleware
-)
-
-from app.api.routes import (
-    router
-)
-
-from app.db.init_db import (
-    init_db
-)
+from app.api.routes import router
+from app.api.auth_routes import router as auth_router
+from app.db.init_db import init_db
 
 
 # =========================
-# Configure Logging
+# Logging Configuration
 # =========================
 logging.basicConfig(
-
     level=logging.INFO,
-
     format=(
         "%(asctime)s | "
         "%(levelname)s | "
@@ -38,44 +23,29 @@ logging.basicConfig(
     )
 )
 
-logger = logging.getLogger(
-    __name__
-)
+logger = logging.getLogger(__name__)
 
 
 # =========================
-# Lifespan Handler
+# Application Lifespan
 # =========================
 @asynccontextmanager
-async def lifespan(
-    app: FastAPI
-):
+async def lifespan(app: FastAPI):
 
     try:
+        logger.info("Starting application")
 
-        logger.info(
-            "Starting application"
-        )
-
-        # Initialize database
         await init_db()
 
-        logger.info(
-            "Database initialized"
-        )
-
-        logger.info(
-            "Application startup complete"
-        )
+        logger.info("Database initialized")
 
         yield
 
     except Exception as e:
 
         logger.error(
-            f"Startup failed: {e}"
+            f"Application startup failed: {e}"
         )
-
         raise
 
     finally:
@@ -86,68 +56,52 @@ async def lifespan(
 
 
 # =========================
-# Create FastAPI App
+# FastAPI App
 # =========================
 app = FastAPI(
-
     title="AI Meeting Assistant",
-
-    description=(
-        "Enterprise AI Meeting "
-        "Intelligence Platform"
-    ),
-
+    description="Enterprise AI Meeting Intelligence Platform",
     version="1.0.0",
-
     lifespan=lifespan
 )
 
 
 # =========================
-# Enable CORS
+# CORS
 # =========================
 app.add_middleware(
-
     CORSMiddleware,
 
-    # WARNING:
-    # Replace "*" in production
+    # Replace with frontend URL in production
     allow_origins=["*"],
 
     allow_credentials=True,
-
     allow_methods=["*"],
-
     allow_headers=["*"],
 )
 
 
 # =========================
-# Root Route
+# Root Endpoint
 # =========================
-@app.get("/")
+@app.get("/", tags=["System"])
 async def root():
 
     return {
-
-        "message":
-            "AI Meeting Assistant API",
-
-        "status":
-            "running"
+        "message": "AI Meeting Assistant API",
+        "status": "running"
     }
 
 
 # =========================
-# Include API Routes
+# Routers
 # =========================
 app.include_router(
+    auth_router,
+    prefix="/api"
+)
 
+app.include_router(
     router,
-
-    prefix="/api",
-
-    tags=[
-        "AI Meeting Assistant"
-    ]
+    prefix="/api"
 )

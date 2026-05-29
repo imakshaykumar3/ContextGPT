@@ -48,7 +48,8 @@ logger = logging.getLogger(__name__)
 # =========================
 async def run_pipeline(
     source: str,
-    language: str = "en"
+    language: str = "en",
+    user_id: int = None
 ):
 
     meeting_id = None
@@ -120,10 +121,22 @@ async def run_pipeline(
         # -------------------------
         # Create DB Record
         # -------------------------
+        if user_id is None:
+
+            raise Exception(
+                "user_id is required"
+            )
+
         meeting_id = await create_meeting(
+
+            user_id=user_id,
+
             source=source,
+
             language=detected_language,
+
             title=title,
+
             file_type=(
                 os.path.splitext(source)[1]
                 if os.path.isfile(source)

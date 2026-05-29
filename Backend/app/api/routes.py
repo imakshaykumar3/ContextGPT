@@ -41,11 +41,16 @@ from app.db.database import (
 )
 
 from app.db.models import (
-    Meeting
+    Meeting,
+    User
 )
 
 from app.rag.rag_engine import (
     ask_question
+)
+
+from app.auth.dependencies import (
+    get_current_user
 )
 
 from app.config.settings import (
@@ -113,7 +118,12 @@ async def home():
 # =========================
 @router.post("/process-url")
 async def process_url(
-    request: ProcessRequest
+
+    request: ProcessRequest,
+
+    current_user: User = Depends(
+        get_current_user
+    )
 ):
 
     try:
@@ -125,9 +135,11 @@ async def process_url(
         # Run async pipeline
         result = await run_pipeline(
 
-            request.source,
+            source=request.source,
 
-            request.language
+            language=request.language,
+
+            user_id=current_user.id
         )
 
         logger.info(
@@ -161,7 +173,11 @@ async def upload_file(
 
     file: UploadFile = File(...),
 
-    language: str = Form("en")
+    language: str = Form("en"),
+
+    current_user: User = Depends(
+        get_current_user
+    )
 ):
 
     try:
@@ -254,9 +270,11 @@ async def upload_file(
         # =========================
         result = await run_pipeline(
 
-            file_path,
+            source=file_path,
 
-            language
+            language=language,
+
+            user_id=current_user.id
         )
 
         logger.info(
@@ -290,7 +308,11 @@ async def get_meeting(
 
     meeting_id: int,
 
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+
+    current_user: User = Depends(
+        get_current_user
+    )
 ):
 
     try:
@@ -306,7 +328,11 @@ async def get_meeting(
         result = await db.execute(
 
             select(Meeting).where(
-                Meeting.id == meeting_id
+
+                Meeting.id == meeting_id,
+
+                Meeting.user_id ==
+                current_user.id
             )
         )
 
@@ -469,7 +495,6 @@ async def get_meeting(
             detail=str(e)
         )
 
-
 # =========================
 # Chat With Meeting
 # =========================
@@ -478,7 +503,15 @@ async def chat_with_meeting(
 
     meeting_id: int,
 
-    request: ChatRequest
+    request: ChatRequest,
+
+    db: AsyncSession = Depends(
+        get_db
+    ),
+
+    current_user: User = Depends(
+        get_current_user
+    )
 ):
 
     try:
@@ -487,6 +520,33 @@ async def chat_with_meeting(
             f"Chat started for "
             f"meeting {meeting_id}"
         )
+
+        # =========================
+        # Verify Meeting Ownership
+        # =========================
+        meeting_result = await db.execute(
+
+            select(Meeting).where(
+
+                Meeting.id == meeting_id,
+
+                Meeting.user_id ==
+                current_user.id
+            )
+        )
+
+        meeting = (
+            meeting_result.scalar_one_or_none()
+        )
+
+        if not meeting:
+
+            raise HTTPException(
+
+                status_code=404,
+
+                detail="Meeting not found"
+            )
 
         # =========================
         # Ask RAG Question
