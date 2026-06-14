@@ -73,32 +73,51 @@ def download_youtube_audio(
             f"{unique_id}.%(ext)s"
         )
 
+        # ydl_opts = {
+
+        #     "format":
+        #         "bestaudio/best",
+
+        #     "outtmpl":
+        #         output_path,
+
+        #     "postprocessors": [
+        #         {
+        #             "key":
+        #                 "FFmpegExtractAudio",
+
+        #             "preferredcodec":
+        #                 "wav",
+
+        #             "preferredquality":
+        #                 YOUTUBE_AUDIO_QUALITY,
+        #         }
+        #     ],
+
+        #     "quiet":
+        #         True,
+
+        #     "no_warnings":
+        #         True
+        # }
+
         ydl_opts = {
+            "format": "bestaudio/best",
+            "outtmpl": output_path,
 
-            "format":
-                "bestaudio/best",
-
-            "outtmpl":
-                output_path,
+            # Use Chrome cookies
+            "cookiesfrombrowser": ("chrome",),
 
             "postprocessors": [
                 {
-                    "key":
-                        "FFmpegExtractAudio",
-
-                    "preferredcodec":
-                        "wav",
-
-                    "preferredquality":
-                        YOUTUBE_AUDIO_QUALITY,
+                    "key": "FFmpegExtractAudio",
+                    "preferredcodec": "wav",
+                    "preferredquality": YOUTUBE_AUDIO_QUALITY,
                 }
             ],
 
-            "quiet":
-                True,
-
-            "no_warnings":
-                True
+            "quiet": False,
+            "no_warnings": False,
         }
 
         with yt_dlp.YoutubeDL(

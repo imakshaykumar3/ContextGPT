@@ -243,25 +243,22 @@ async def run_pipeline(
         )
 
         return {
-
             "meeting_id":
                 meeting_id,
-
             "title":
                 title,
-
             "language":
                 detected_language,
-
+            "transcript": 
+                transcript,
+            "segments": 
+                segments,
             "summary":
                 summary,
-
             "action_items":
                 action_items,
-
             "key_decisions":
                 key_decisions,
-
             "open_questions":
                 open_questions
         }
